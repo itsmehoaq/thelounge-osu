@@ -208,7 +208,7 @@
 
 			<h2>User preferences</h2>
 			<div class="connect-row">
-				<label for="connect:nick">Nick</label>
+				<label for="connect:nick">{{ config?.lockNetwork ? "osu! username" : "Nick" }}</label>
 				<input
 					id="connect:nick"
 					v-model="defaults.nick"
@@ -216,11 +216,12 @@
 					name="nick"
 					pattern="[^\s:!@]+"
 					maxlength="100"
+					placeholder="YourOsuUsername"
 					required
 					@input="onNickChanged"
 				/>
 			</div>
-			<template v-if="!config?.useHexIp">
+			<template v-if="!config?.useHexIp && !config?.lockNetwork">
 				<div class="connect-row">
 					<label for="connect:username">Username</label>
 					<input
@@ -233,27 +234,29 @@
 					/>
 				</div>
 			</template>
-			<div class="connect-row">
-				<label for="connect:realname">Real name</label>
-				<input
-					id="connect:realname"
-					v-model.trim="defaults.realname"
-					class="input"
-					name="realname"
-					maxlength="300"
-				/>
-			</div>
-			<div class="connect-row">
-				<label for="connect:leaveMessage">Leave message</label>
-				<input
-					id="connect:leaveMessage"
-					v-model.trim="defaults.leaveMessage"
-					autocomplete="off"
-					class="input"
-					name="leaveMessage"
-					placeholder="osu! IRC client"
-				/>
-			</div>
+			<template v-if="!config?.lockNetwork">
+				<div class="connect-row">
+					<label for="connect:realname">Real name</label>
+					<input
+						id="connect:realname"
+						v-model.trim="defaults.realname"
+						class="input"
+						name="realname"
+						maxlength="300"
+					/>
+				</div>
+				<div class="connect-row">
+					<label for="connect:leaveMessage">Leave message</label>
+					<input
+						id="connect:leaveMessage"
+						v-model.trim="defaults.leaveMessage"
+						autocomplete="off"
+						class="input"
+						name="leaveMessage"
+						placeholder="osu! IRC client"
+					/>
+				</div>
+			</template>
 			<template v-if="defaults.uuid && !store.state.serverConfiguration?.public">
 				<div class="connect-row">
 					<label for="connect:commands">
@@ -278,7 +281,7 @@ the server tab on new connection"
 					/>
 				</div>
 			</template>
-			<template v-else-if="!defaults.uuid">
+			<template v-else-if="!defaults.uuid && !config?.lockNetwork">
 				<div class="connect-row">
 					<label for="connect:channels">Channels</label>
 					<input
@@ -293,16 +296,7 @@ the server tab on new connection"
 			<template v-if="store.state.serverConfiguration?.public">
 				<template v-if="config?.lockNetwork">
 					<div class="connect-row">
-						<label></label>
-						<div class="input-wrap">
-							<label class="tls">
-								<input v-model="displayPasswordField" type="checkbox" />
-								I have a password
-							</label>
-						</div>
-					</div>
-					<div v-if="displayPasswordField" class="connect-row">
-						<label for="connect:password">Password</label>
+						<label for="connect:password">IRC password</label>
 						<RevealPassword
 							v-slot:default="slotProps"
 							class="input-wrap password-container"
@@ -313,11 +307,23 @@ the server tab on new connection"
 								v-model="defaults.password"
 								class="input"
 								:type="slotProps.isVisible ? 'text' : 'password'"
-								placeholder="osu! IRC password (from osu! settings → IRC)"
+								placeholder="IRC server password"
 								name="password"
 								maxlength="300"
+								required
 							/>
 						</RevealPassword>
+					</div>
+					<div class="connect-row">
+						<label></label>
+						<p class="connect-hint">
+							Not your osu! account password.
+							<a
+								href="https://osu.ppy.sh/home/account/edit#:~:text=Unlink%20GitHub%20Account-,Legacy%20API,-api"
+								target="_blank"
+								rel="noopener"
+							>Get it here</a>.
+						</p>
 					</div>
 				</template>
 			</template>
@@ -434,6 +440,16 @@ the server tab on new connection"
 #connect .connect-sasl-external pre {
 	margin: 0;
 	user-select: text;
+}
+
+#connect .connect-hint {
+	font-size: 12px;
+	color: var(--body-color-muted);
+	margin: 0;
+}
+
+#connect .connect-hint a {
+	color: var(--link-color);
 }
 </style>
 
