@@ -28,7 +28,7 @@ const defaultConfig = {
 		default: "",
 	},
 	coloredNicks: {
-		default: true,
+		default: false,
 	},
 	desktopNotifications: {
 		default: false,
@@ -61,7 +61,7 @@ const defaultConfig = {
 		sync: "always",
 	},
 	links: {
-		default: true,
+		default: false,
 	},
 	motd: {
 		default: true,
@@ -74,7 +74,7 @@ const defaultConfig = {
 		default: false,
 	},
 	showSeconds: {
-		default: false,
+		default: true,
 	},
 	use12hClock: {
 		default: false,
@@ -125,7 +125,7 @@ const defaultConfig = {
 		},
 	},
 	media: {
-		default: true,
+		default: false,
 	},
 	uploadCanvas: {
 		default: true,

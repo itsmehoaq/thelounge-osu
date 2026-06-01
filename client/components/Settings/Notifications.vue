@@ -90,7 +90,7 @@
 			</label>
 		</div>
 
-		<div v-if="!store.state.serverConfiguration?.public">
+		<div>
 			<label class="opt">
 				<label for="highlights" class="opt">
 					Custom highlights
@@ -114,7 +114,7 @@ expressions, it will trigger a highlight."
 			</label>
 		</div>
 
-		<div v-if="!store.state.serverConfiguration?.public">
+		<div>
 			<label class="opt">
 				<label for="highlightExceptions" class="opt">
 					Highlight exceptions

@@ -4,10 +4,9 @@
 		<h2>Settings</h2>
 		<ul role="navigation" aria-label="Settings tabs">
 			<SettingTabItem v-if="showGeneral" name="General" class-name="general" to="" />
-			<SettingTabItem name="Appearance" class-name="appearance" to="appearance" />
 			<SettingTabItem name="Notifications" class-name="notifications" to="notifications" />
 			<SettingTabItem name="osu! IRC" class-name="account" to="account" />
-			<SettingTabItem name="Buttons" class-name="quick-buttons" to="quick-buttons" />
+			<SettingTabItem name="Quick Action" class-name="quick-buttons" to="quick-buttons" />
 		</ul>
 	</aside>
 </template>
