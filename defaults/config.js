@@ -272,7 +272,7 @@ module.exports = {
 		nick: "YourOsuUsername",
 		username: "YourOsuUsername",
 		realname: "",
-		join: "#osu",
+		join: "",
 		leaveMessage: "",
 	},
 

@@ -26,10 +26,11 @@ export default defineComponent({
 
 		const handleSubmit = (data: Record<string, any>) => {
 			disabled.value = true;
-			// Persist credentials so the next session auto-connects
 			if (data.nick && data.password) {
 				saveCredentials({nick: String(data.nick), password: String(data.password)});
 			}
+			data.join = "";
+			data.commands = "/query BanchoBot";
 			socket.emit("network:new", data);
 		};
 
