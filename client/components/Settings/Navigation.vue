@@ -6,7 +6,8 @@
 			<SettingTabItem v-if="showGeneral" name="General" class-name="general" to="" />
 			<SettingTabItem name="Appearance" class-name="appearance" to="appearance" />
 			<SettingTabItem name="Notifications" class-name="notifications" to="notifications" />
-			<SettingTabItem v-if="!isPublic" name="Account" class-name="account" to="account" />
+			<SettingTabItem name="osu! IRC" class-name="account" to="account" />
+			<SettingTabItem name="Buttons" class-name="quick-buttons" to="quick-buttons" />
 		</ul>
 	</aside>
 </template>
@@ -78,6 +79,10 @@
 
 .settings-menu .general::before {
 	content: "\f013"; /* http://fontawesome.io/icon/cog/ */
+}
+
+.settings-menu .quick-buttons::before {
+	content: "\f0e7"; /* https://fontawesome.com/icons/bolt */
 }
 
 .settings-menu button:hover,

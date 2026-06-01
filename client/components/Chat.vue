@@ -116,6 +116,7 @@
 		>
 			{{ store.state.currentUserVisibleError }}
 		</div>
+		<OsuQuickActions :network="network" :channel="channel" />
 		<ChatInput :network="network" :channel="channel" />
 	</div>
 </template>
@@ -126,6 +127,7 @@ import eventbus from "../js/eventbus";
 import ParsedMessage from "./ParsedMessage.vue";
 import MessageList from "./MessageList.vue";
 import ChatInput from "./ChatInput.vue";
+import OsuQuickActions from "./OsuQuickActions.vue";
 import ChatUserList from "./ChatUserList.vue";
 import SidebarToggle from "./SidebarToggle.vue";
 import MessageSearchForm from "./MessageSearchForm.vue";
@@ -145,6 +147,7 @@ export default defineComponent({
 		ParsedMessage,
 		MessageList,
 		ChatInput,
+		OsuQuickActions,
 		ChatUserList,
 		SidebarToggle,
 		MessageSearchForm,

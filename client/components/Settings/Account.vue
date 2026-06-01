@@ -1,197 +1,154 @@
 <template>
 	<div>
-		<div
-			v-if="
-				!store.state.serverConfiguration?.public &&
-				!store.state.serverConfiguration?.ldapEnabled
-			"
-			id="change-password"
-			role="group"
-			aria-labelledby="label-change-password"
-		>
-			<h2 id="label-change-password">Change password</h2>
-			<div class="password-container">
-				<label for="current-password" class="sr-only"> Enter current password </label>
-				<RevealPassword v-slot:default="slotProps">
-					<input
-						id="current-password"
-						v-model="old_password"
-						autocomplete="current-password"
-						:type="slotProps.isVisible ? 'text' : 'password'"
-						name="old_password"
-						class="input"
-						placeholder="Enter current password"
-					/>
-				</RevealPassword>
-			</div>
-			<div class="password-container">
-				<label for="new-password" class="sr-only"> Enter desired new password </label>
-				<RevealPassword v-slot:default="slotProps">
-					<input
-						id="new-password"
-						v-model="new_password"
-						:type="slotProps.isVisible ? 'text' : 'password'"
-						name="new_password"
-						autocomplete="new-password"
-						class="input"
-						placeholder="Enter desired new password"
-					/>
-				</RevealPassword>
-			</div>
-			<div class="password-container">
-				<label for="new-password-verify" class="sr-only"> Repeat new password </label>
-				<RevealPassword v-slot:default="slotProps">
-					<input
-						id="new-password-verify"
-						v-model="verify_password"
-						:type="slotProps.isVisible ? 'text' : 'password'"
-						name="verify_password"
-						autocomplete="new-password"
-						class="input"
-						placeholder="Repeat new password"
-					/>
-				</RevealPassword>
-			</div>
-			<div
-				v-if="passwordChangeStatus && passwordChangeStatus.success"
-				class="feedback success"
-			>
-				Successfully updated your password
-			</div>
-			<div
-				v-else-if="passwordChangeStatus && passwordChangeStatus.error"
-				class="feedback error"
-			>
-				{{ passwordErrors[passwordChangeStatus.error] }}
-			</div>
-			<div>
-				<button type="submit" class="btn" @click.prevent="changePassword">
-					Change password
-				</button>
-			</div>
-		</div>
+		<h2>osu! IRC</h2>
 
-		<div v-if="!store.state.serverConfiguration?.public" class="session-list" role="group">
-			<h2>Sessions</h2>
+		<div v-if="saveStatus === 'ok'" class="feedback success">Settings saved. Reconnect to apply.</div>
+		<div v-else-if="saveStatus === 'err'" class="feedback error">Failed to save settings.</div>
 
-			<h3>Current session</h3>
-			<Session v-if="currentSession" :session="currentSession" />
-
-			<template v-if="activeSessions.length > 0">
-				<h3>Active sessions</h3>
-				<Session
-					v-for="session in activeSessions"
-					:key="session.token"
-					:session="session"
-				/>
-			</template>
-
-			<h3>Other sessions</h3>
-			<p v-if="store.state.sessions.length === 0">Loading…</p>
-			<p v-else-if="otherSessions.length === 0">
-				<em>You are not currently logged in to any other device.</em>
-			</p>
-			<Session
-				v-for="session in otherSessions"
-				v-else
-				:key="session.token"
-				:session="session"
+		<!-- Username -->
+		<div class="opt osu-field">
+			<label for="osu-nick" class="osu-label">osu! username</label>
+			<input
+				id="osu-nick"
+				v-model.trim="form.nick"
+				type="text"
+				class="input"
+				placeholder="YourOsuUsername"
+				autocomplete="off"
+				@keydown.stop
 			/>
 		</div>
+
+		<!-- IRC password -->
+		<div class="opt osu-field">
+			<label for="osu-password" class="osu-label">IRC password</label>
+			<p class="osu-hint">
+				Not your account password.
+				<a
+					href="https://osu.ppy.sh/home/account/edit#:~:text=Unlink%20GitHub%20Account-,Legacy%20API,-api"
+					target="_blank"
+					rel="noopener"
+				>Get it here</a>.
+			</p>
+			<RevealPassword v-slot:default="slotProps" class="input-wrap password-container">
+				<input
+					id="osu-password"
+					v-model="form.password"
+					:type="slotProps.isVisible ? 'text' : 'password'"
+					class="input"
+					placeholder="IRC server password"
+					autocomplete="off"
+					@keydown.stop
+				/>
+			</RevealPassword>
+		</div>
+
+		<div class="osu-save-row">
+			<button type="button" class="btn" @click="saveAndReconnect">Save &amp; Reconnect</button>
+		</div>
+		<p class="osu-hint">Reconnect will open a new connection using the updated credentials.</p>
 	</div>
 </template>
 
 <script lang="ts">
-import socket from "../../js/socket";
+import {defineComponent, ref, reactive} from "vue";
 import RevealPassword from "../RevealPassword.vue";
-import Session from "../Session.vue";
-import {computed, defineComponent, onMounted, PropType, ref} from "vue";
+import {storedCredentials, saveCredentials} from "../../js/helpers/osuCredentials";
+import {useRouter} from "vue-router";
+import socket from "../../js/socket";
 import {useStore} from "../../js/store";
 
 export default defineComponent({
-	name: "UserSettings",
-	components: {
-		RevealPassword,
-		Session,
-	},
+	name: "OsuIrcSettings",
+	components: {RevealPassword},
 	setup() {
+		const router = useRouter();
 		const store = useStore();
+		const saveStatus = ref<"ok" | "err" | null>(null);
 
-		const passwordErrors = {
-			missing_fields: "Please fill in all fields",
-			password_mismatch: "Both new password fields must match",
-			password_incorrect: "The current password field does not match your account password",
-			update_failed: "Failed to update your password",
-		};
-
-		const passwordChangeStatus = ref<{
-			success: boolean;
-			error: keyof typeof passwordErrors;
-		}>();
-
-		const old_password = ref("");
-		const new_password = ref("");
-		const verify_password = ref("");
-
-		const currentSession = computed(() => {
-			return store.state.sessions.find((item) => item.current);
+		const form = reactive({
+			nick: storedCredentials.value?.nick ?? "",
+			password: storedCredentials.value?.password ?? "",
 		});
 
-		const activeSessions = computed(() => {
-			return store.state.sessions.filter((item) => !item.current && item.active > 0);
-		});
+		let statusTimer: ReturnType<typeof setTimeout> | null = null;
 
-		const otherSessions = computed(() => {
-			return store.state.sessions.filter((item) => !item.current && !item.active);
-		});
-
-		onMounted(() => {
-			socket.emit("sessions:get");
-		});
-
-		const changePassword = () => {
-			const data = {
-				old_password: old_password.value,
-				new_password: new_password.value,
-				verify_password: verify_password.value,
-			};
-
-			if (!data.old_password || !data.new_password || !data.verify_password) {
-				passwordChangeStatus.value = {
-					success: false,
-					error: "missing_fields",
-				};
+		const saveAndReconnect = () => {
+			if (!form.nick || !form.password) {
+				saveStatus.value = "err";
 				return;
 			}
 
-			if (data.new_password !== data.verify_password) {
-				passwordChangeStatus.value = {
-					success: false,
-					error: "password_mismatch",
-				};
+			try {
+				saveCredentials({nick: form.nick, password: form.password});
+				saveStatus.value = "ok";
+				if (statusTimer) clearTimeout(statusTimer);
+				statusTimer = setTimeout(() => (saveStatus.value = null), 3000);
+			} catch {
+				saveStatus.value = "err";
 				return;
 			}
 
-			socket.once("change-password", (response) => {
-				// TODO type
-				passwordChangeStatus.value = response as any;
-			});
-
-			socket.emit("change-password", data);
+			// Disconnect all current networks then navigate to /connect (auto-connect will fire)
+			const networks = store.state.networks;
+			for (const net of networks) {
+				socket.emit("input", {target: net.channels[0].id, text: "/quit"});
+			}
+			setTimeout(() => router.push("/connect"), 400);
 		};
 
-		return {
-			store,
-			passwordChangeStatus,
-			passwordErrors,
-			currentSession,
-			activeSessions,
-			otherSessions,
-			changePassword,
-			old_password,
-			new_password,
-			verify_password,
-		};
+		return {form, saveStatus, saveAndReconnect};
 	},
 });
 </script>
+
+<style>
+.osu-label {
+	display: block;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--body-color-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	margin-bottom: 5px;
+}
+
+.osu-hint {
+	font-size: 12px;
+	color: var(--body-color-muted);
+	margin: 0 0 8px;
+}
+
+.osu-field {
+	display: flex;
+	flex-direction: column;
+	margin-bottom: 14px;
+}
+
+.osu-save-row {
+	display: flex;
+	gap: 8px;
+	margin-top: 4px;
+	margin-bottom: 4px;
+}
+
+.feedback.success {
+	padding: 8px 12px;
+	background: rgba(80, 200, 100, 0.12);
+	border: 1px solid rgba(80, 200, 100, 0.3);
+	border-radius: 4px;
+	color: #50c864;
+	font-size: 13px;
+	margin-bottom: 14px;
+}
+
+.feedback.error {
+	padding: 8px 12px;
+	background: rgba(255, 68, 102, 0.12);
+	border: 1px solid rgba(255, 68, 102, 0.3);
+	border-radius: 4px;
+	color: #ff4466;
+	font-size: 13px;
+	margin-bottom: 14px;
+}
+</style>

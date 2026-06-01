@@ -16,13 +16,13 @@
 	<% }); %>
 	<style id="user-specified-css"></style>
 
-	<title>The Lounge</title>
+	<title>osu! IRC</title>
 
 	<!-- Browser tab icon -->
 	<link id="favicon" rel="icon" sizes="16x16 32x32 64x64" href="favicon.ico" data-other="img/favicon-alerted.ico" type="image/x-icon">
 
 	<!-- Safari pinned tab icon -->
-	<link rel="mask-icon" href="img/icon-black-transparent-bg.svg" color="#415364">
+	<link rel="mask-icon" href="img/icon-black-transparent-bg.svg" color="#FF66AA">
 
 	<link rel="manifest" href="thelounge.webmanifest" crossorigin="use-credentials">
 
@@ -36,7 +36,7 @@
 	<link rel="apple-touch-icon" sizes="180x180" href="img/logo-grey-bg-180x180px.png">
 
 	<!-- Windows 8/10 - Edge tiles -->
-	<meta name="application-name" content="The Lounge">
+	<meta name="application-name" content="osu! IRC">
 	<meta name="msapplication-TileColor" content="<%- themeColor %>">
 	<meta name="msapplication-square70x70logo" content="img/logo-grey-bg-120x120px.png">
 	<meta name="msapplication-square150x150logo" content="img/logo-grey-bg-152x152px.png">

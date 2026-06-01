@@ -1,95 +1,191 @@
 <h1 align="center">
 	<img
-		width="300"
-		alt="The Lounge"
-		src="https://raw.githubusercontent.com/thelounge/thelounge/master/client/img/logo-vertical-transparent-bg.svg?sanitize=true">
+		width="200"
+		alt="osu!"
+		src="https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Osu%21_Logo_2016.svg/1200px-Osu%21_Logo_2016.svg.png">
 </h1>
 
+<h2 align="center">thelounge-osu</h2>
+
 <h3 align="center">
-	Modern web IRC client designed for self-hosting
+	osu! IRC client for tournament referees — built on <a href="https://github.com/thelounge/thelounge">TheLounge</a>
 </h3>
 
 <p align="center">
-	<strong>
-		<a href="https://thelounge.chat/">Website</a>
-		•
-		<a href="https://thelounge.chat/docs">Docs</a>
-		•
-		<a href="https://demo.thelounge.chat/">Demo</a>
-    •
-		<a href="https://github.com/thelounge/thelounge-docker">Docker</a>
-	</strong>
-</p>
-<p align="center">
-	<a href="https://demo.thelounge.chat/"><img
-		alt="#thelounge IRC channel on Libera.Chat"
-		src="https://img.shields.io/badge/Libera.Chat-%23thelounge-415364.svg?colorA=ff9e18"></a>
-	<a href="https://yarn.pm/thelounge"><img
-		alt="npm version"
-		src="https://img.shields.io/npm/v/thelounge.svg?colorA=333a41&maxAge=3600"></a>
-	<a href="https://github.com/thelounge/thelounge/actions"><img
-		alt="Build Status"
-		src="https://github.com/thelounge/thelounge/actions/workflows/build.yml/badge.svg"></a>
+	Auto-connects to Bancho · <code>!mp</code> autocomplete · Quick action buttons · osu! pink theme
 </p>
 
-<p align="center">
-	<img src="https://raw.githubusercontent.com/thelounge/thelounge.github.io/master/img/thelounge-screenshot.png" width="550">
-</p>
+---
 
-## Overview
+## What this is
 
-- **Modern features brought to IRC.** Push notifications, link previews, new message markers, and more bring IRC to the 21st century.
-- **Always connected.** Remains connected to IRC servers while you are offline.
-- **Cross platform.** It doesn't matter what OS you use, it just works wherever Node.js runs.
-- **Responsive interface.** The client works smoothly on every desktop, smartphone and tablet.
-- **Synchronized experience.** Always resume where you left off no matter what device.
+A fork of [TheLounge](https://github.com/thelounge/thelounge) customised for osu! tournament referee work:
 
-To learn more about configuration, usage and features of The Lounge, take a look at [the website](https://thelounge.chat).
+- **Auto-connects to osu! Bancho** (`irc.ppy.sh:6667`) on first load after credentials are saved
+- **osu! pink theme** (`#FF66AA`) with dark background
+- **`!mp` command autocomplete** — all 24 subcommands with descriptions
+- **Quick action bar** above the chat input — one-click Timer, Start, Abort, and custom buttons
+- **Custom button sequences** — define multi-command macros (e.g. `!mp set`, `!mp size`, `!mp mods` in one click)
+- **Public mode** — no server login; each referee stores their own osu! IRC credentials in their browser's localStorage
+- **Credential settings panel** — update username/password and reconnect without touching config files
 
-The Lounge is the official and community-managed fork of [Shout](https://github.com/erming/shout), by [Mattias Erming](https://github.com/erming).
+## How it works
 
-## Installation and usage
+TheLounge runs in **public mode** with **network locked to Bancho**:
 
-The Lounge requires latest [Node.js](https://nodejs.org/) LTS version or more recent.
-The [Yarn package manager](https://yarnpkg.com/) is also recommended.
-If you want to install with npm, `--unsafe-perm` is required for a correct install.
+- First visit → connect form shows only Nick + Password fields
+- After submitting, credentials are saved to `localStorage` in the browser
+- Every subsequent visit auto-connects silently using stored credentials
+- **Settings → osu! IRC** lets referees update credentials and reconnect
 
-### Running stable releases
+Bancho itself rejects invalid credentials, so no additional auth layer is needed.
 
-Please refer to the [install and upgrade documentation on our website](https://thelounge.chat/docs/install-and-upgrade) for all available installation methods.
+## Deployment
 
-### Running from source
-
-The following commands install and run the development version of The Lounge:
+### Local (macOS)
 
 ```sh
-git clone https://github.com/thelounge/thelounge.git
-cd thelounge
+git clone https://github.com/itsmehoaq/thelounge-osu
+cd thelounge-osu
 yarn install
 NODE_ENV=production yarn build
-yarn start
+node index start
 ```
 
-When installed like this, `thelounge` executable is not created. Use `node index <command>` to run commands.
+Configure `~/.thelounge/config.js` with your defaults (host, port, theme).
 
-⚠️ While it is the most recent codebase, this is not production-ready! Run at
-your own risk. It is also not recommended to run this as root.
+#### Run as a boot service (macOS LaunchAgent)
 
-## Development setup
+Create `~/Library/LaunchAgents/com.thelounge.osu.plist`:
 
-Simply follow the instructions to run The Lounge from source above, on your own
-fork.
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>       <string>com.thelounge.osu</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/node</string>
+    <string>/path/to/thelounge-osu/index.js</string>
+    <string>start</string>
+  </array>
+  <key>RunAtLoad</key>   <true/>
+  <key>KeepAlive</key>   <true/>
+  <key>StandardOutPath</key> <string>/tmp/thelounge-osu.log</string>
+  <key>StandardErrorPath</key> <string>/tmp/thelounge-osu.log</string>
+</dict>
+</plist>
+```
 
-Before submitting any change, make sure to:
+```sh
+launchctl load ~/Library/LaunchAgents/com.thelounge.osu.plist
+```
 
-- Read the [Contributing instructions](https://github.com/thelounge/thelounge/blob/master/.github/CONTRIBUTING.md#contributing)
-- Run `yarn test` to execute linters and the test suite
-  - Run `yarn format:prettier` if linting fails
-- Run `yarn build:client` if you change or add anything in `client/js` or `client/components`
-  - The built files will be output to `public/` by webpack
-- Run `yarn build:server` if you change anything in `server/`
-  - The built files will be output to `dist/` by tsc
-- `yarn dev` can be used to start The Lounge with hot module reloading
+### VPS / Linux (recommended for tournaments)
 
-To ensure that you don't commit files that fail the linting, you can install a pre-commit git hook.
-Execute `yarn githooks-install` to do so.
+```sh
+# Install Node.js 20+, yarn, then:
+git clone https://github.com/itsmehoaq/thelounge-osu
+cd thelounge-osu
+yarn install
+NODE_ENV=production yarn build
+```
+
+Create `/etc/systemd/system/thelounge-osu.service`:
+
+```ini
+[Unit]
+Description=thelounge-osu IRC client
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/node /home/user/thelounge-osu/index.js start
+Restart=always
+User=user
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```sh
+systemctl enable --now thelounge-osu
+```
+
+### Public access via Cloudflare Tunnel
+
+To expose the client to referees without opening inbound firewall ports:
+
+```sh
+cloudflared tunnel login
+cloudflared tunnel create osu-ref
+cloudflared tunnel route dns osu-ref osu-ref.yourdomain.com
+```
+
+Config `~/.cloudflared/config.yml`:
+
+```yaml
+tunnel: <tunnel-id>
+credentials-file: /home/user/.cloudflared/<tunnel-id>.json
+
+ingress:
+  - hostname: osu-ref.yourdomain.com
+    service: http://localhost:9000
+  - service: http_status:404
+```
+
+```sh
+cloudflared service install
+systemctl enable --now cloudflared
+```
+
+Referees visit `https://osu-ref.yourdomain.com`, enter their osu! IRC credentials once, and auto-connect on every subsequent visit.
+
+## Configuration
+
+Key settings in `~/.thelounge/config.js`:
+
+```js
+public: true,          // No server login required
+lockNetwork: true,     // Lock to Bancho — refs can't point elsewhere
+messageStorage: [],    // No server-side IRC log retention
+theme: "osu",          // osu! pink dark theme
+
+defaults: {
+  name: "osu! Bancho",
+  host: "irc.ppy.sh",
+  port: 6667,
+  tls: false,
+  nick: "YourOsuUsername",
+  join: "#osu",
+},
+```
+
+## Getting your osu! IRC password
+
+Your IRC password is **not** your osu! account password. Get it from:
+
+**osu! website → Settings → [Legacy API section](https://osu.ppy.sh/home/account/edit#irc-password)**
+
+## Quick action buttons
+
+The bar above the chat input has built-in buttons:
+
+| Button | Command sent |
+|--------|-------------|
+| Timer  | `!mp timer 120` |
+| Start  | `!mp start` |
+| Abort  | `!mp abort` |
+
+Custom buttons are configured in **Settings → Buttons** and support multi-command sequences (one command per line). Each custom button can use any [Lucide icon](https://lucide.dev/icons/) name.
+
+## `!mp` autocomplete
+
+Type `!mp ` in any channel and press Tab to see all subcommands with descriptions:
+
+`abort` `aborttimer` `addref` `ban` `clearhost` `close` `host` `invite` `kick` `listrefs` `lock` `make` `makeprivate` `map` `mods` `move` `password` `removeref` `set` `size` `start` `team` `timer` `unlock`
+
+## Credits
+
+Built on [TheLounge](https://github.com/thelounge/thelounge) — MIT licensed.

@@ -91,6 +91,16 @@ interface ServerToClientEvents {
 
 	error: (error: any) => void;
 
+	"osu:settings": EventHandler<{
+		nick: string;
+		password: string;
+		host: string;
+		port: number;
+		tls: boolean;
+		customServers: {name: string; host: string; port: number; tls: boolean}[];
+	}>;
+	"osu:settings:saved": EventHandler<{success: boolean; error?: string}>;
+
 	connecting: NoPayloadEventHandler;
 
 	join: EventHandler<{
@@ -172,6 +182,16 @@ interface ClientToServerEvents {
 	"history:clear": EventHandler<{target: number}>;
 
 	search: EventHandler<SearchQuery>;
+
+	"osu:settings:get": NoPayloadEventHandler;
+	"osu:settings:save": EventHandler<{
+		nick?: string;
+		password?: string;
+		host?: string;
+		port?: number;
+		tls?: boolean;
+		customServers?: {name: string; host: string; port: number; tls: boolean}[];
+	}>;
 }
 
 interface InterServerEvents {}

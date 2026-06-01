@@ -66,7 +66,7 @@
 							v-model="defaults.password"
 							class="input"
 							:type="slotProps.isVisible ? 'text' : 'password'"
-							placeholder="Server password (optional)"
+							placeholder="osu! IRC password (from osu! settings → IRC)"
 							name="password"
 							maxlength="300"
 						/>
@@ -198,7 +198,7 @@
 							v-model="defaults.password"
 							class="input"
 							:type="slotProps.isVisible ? 'text' : 'password'"
-							placeholder="Server password (optional)"
+							placeholder="osu! IRC password (from osu! settings → IRC)"
 							name="password"
 							maxlength="300"
 						/>
@@ -251,7 +251,7 @@
 					autocomplete="off"
 					class="input"
 					name="leaveMessage"
-					placeholder="The Lounge - https://thelounge.chat"
+					placeholder="osu! IRC client"
 				/>
 			</div>
 			<template v-if="defaults.uuid && !store.state.serverConfiguration?.public">
@@ -313,7 +313,7 @@ the server tab on new connection"
 								v-model="defaults.password"
 								class="input"
 								:type="slotProps.isVisible ? 'text' : 'password'"
-								placeholder="Server password (optional)"
+								placeholder="osu! IRC password (from osu! settings → IRC)"
 								name="password"
 								maxlength="300"
 							/>

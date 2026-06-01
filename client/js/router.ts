@@ -15,6 +15,7 @@ import AppearanceSettings from "../components/Settings/Appearance.vue";
 import GeneralSettings from "../components/Settings/General.vue";
 import AccountSettings from "../components/Settings/Account.vue";
 import NotificationSettings from "../components/Settings/Notifications.vue";
+import QuickButtonsSettings from "../components/Settings/QuickButtons.vue";
 import {ClientChan} from "./types";
 import {shouldShowGeneralSettings} from "./helpers/settingsTabs";
 
@@ -73,6 +74,11 @@ const router = createRouter({
 					name: "Notifications",
 					path: "notifications",
 					component: NotificationSettings,
+				},
+				{
+					name: "QuickButtons",
+					path: "quick-buttons",
+					component: QuickButtonsSettings,
 				},
 			],
 		},

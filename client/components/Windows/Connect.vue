@@ -3,11 +3,12 @@
 </template>
 
 <script lang="ts">
-import {defineComponent, ref} from "vue";
+import {defineComponent, ref, onMounted, nextTick} from "vue";
 
 import socket from "../../js/socket";
 import {useStore} from "../../js/store";
 import NetworkForm, {NetworkFormDefaults} from "../NetworkForm.vue";
+import {storedCredentials, saveCredentials} from "../../js/helpers/osuCredentials";
 
 export default defineComponent({
 	name: "Connect",
@@ -21,9 +22,14 @@ export default defineComponent({
 		const store = useStore();
 
 		const disabled = ref(false);
+		const formRef = ref<InstanceType<typeof NetworkForm> | null>(null);
 
 		const handleSubmit = (data: Record<string, any>) => {
 			disabled.value = true;
+			// Persist credentials so the next session auto-connects
+			if (data.nick && data.password) {
+				saveCredentials({nick: String(data.nick), password: String(data.password)});
+			}
 			socket.emit("network:new", data);
 		};
 
@@ -107,10 +113,26 @@ export default defineComponent({
 			)
 		);
 
+		onMounted(async () => {
+			const creds = storedCredentials.value;
+			if (!creds) return;
+
+			// Pre-fill from localStorage
+			defaults.value = Object.assign({}, defaults.value, {
+				nick: creds.nick,
+				password: creds.password,
+			});
+
+			// Auto-submit on next tick once the form has rendered
+			await nextTick();
+			handleSubmit(defaults.value as Record<string, any>);
+		});
+
 		return {
 			defaults,
 			disabled,
 			handleSubmit,
+			formRef,
 		};
 	},
 });

@@ -4830,7 +4830,6 @@ ipaddr.js@1.9.1:
 
 "irc-framework@github:kiwiirc/irc-framework#9578e59":
   version "4.14.0"
-  uid "9578e59a1056499e4a03a0f0fd2c260e9aadc541"
   resolved "https://codeload.github.com/kiwiirc/irc-framework/tar.gz/9578e59a1056499e4a03a0f0fd2c260e9aadc541"
   dependencies:
     buffer "^6.0.3"
@@ -5521,6 +5520,11 @@ lru-cache@^6.0.0:
   integrity sha512-Jo6dJ04CmSjuznwJSS3pUeWmd/H0ffTlkXXgwZi+eq1UCmqQwCh+eLsYOYCwY991i2Fah4h1BEMCx4qThGbsiA==
   dependencies:
     yallist "^4.0.0"
+
+lucide-vue-next@1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/lucide-vue-next/-/lucide-vue-next-1.0.0.tgz#663ad26b7bfa327c7662b75bb0b843ebe749a31b"
+  integrity sha512-V6SPvx1IHTj/UY+FrIYWV5faISsPSb8BnWSFDxAtezWKvWc9ZZ40PDrdu1/Qb5vg4lHWr1hs1BAMGVGm6V1Xdg==
 
 magic-string@^0.25.7:
   version "0.25.9"

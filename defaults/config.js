@@ -100,7 +100,7 @@ module.exports = {
 	// Solarized would be `thelounge-theme-solarized`.
 	//
 	// This value is set to `"default"` by default.
-	theme: "default",
+	theme: "osu",
 
 	// ### `prefetch`
 	//
@@ -263,16 +263,16 @@ module.exports = {
 	// }
 	// ```
 	defaults: {
-		name: "Libera.Chat",
-		host: "irc.libera.chat",
-		port: 6697,
+		name: "osu! Bancho",
+		host: "irc.ppy.sh",
+		port: 6667,
 		password: "",
-		tls: true,
-		rejectUnauthorized: true,
-		nick: "thelounge%%",
-		username: "thelounge",
+		tls: false,
+		rejectUnauthorized: false,
+		nick: "YourOsuUsername",
+		username: "YourOsuUsername",
 		realname: "",
-		join: "#thelounge",
+		join: "#osu",
 		leaveMessage: "",
 	},
 

@@ -68,6 +68,49 @@ const chanStrategy: StrategyProps = {
 	index: 2,
 };
 
+const mpSubcommands: [string, string][] = [
+	["abort", "Abort the match"],
+	["aborttimer", "Abort the countdown timer"],
+	["addref", "Add a referee: !mp addref <player>"],
+	["ban", "Ban a player: !mp ban <player>"],
+	["clearhost", "Remove the current host"],
+	["close", "Close the room"],
+	["host", "Set room host: !mp host <player>"],
+	["invite", "Invite a player: !mp invite <player>"],
+	["kick", "Kick a player: !mp kick <player>"],
+	["listrefs", "List all referees"],
+	["lock", "Lock all slots"],
+	["make", "Create a match: !mp make <name>"],
+	["makeprivate", "Create a private match: !mp makeprivate <name>"],
+	["map", "Set beatmap: !mp map <id> [mode]"],
+	["mods", "Set mods: !mp mods <HD|HR|DT|HT|EZ|FM|NM ...>"],
+	["move", "Move player to slot: !mp move <player> <slot>"],
+	["password", "Set room password: !mp password [pw]"],
+	["removeref", "Remove a referee: !mp removeref <player>"],
+	["set", "Room settings: !mp set <teammode> [scoremode] [size]"],
+	["size", "Set room size: !mp size <1-16>"],
+	["start", "Start the game: !mp start [seconds]"],
+	["team", "Set player team: !mp team <player> red|blue"],
+	["timer", "Start countdown: !mp timer [seconds]"],
+	["unlock", "Unlock all slots"],
+];
+
+const mpCommandStrategy: StrategyProps = {
+	id: "mp-commands",
+	match: /(!mp )(\w*)$/,
+	search(term: string, callback: (matches: [string, string][]) => void) {
+		const lower = term.toLowerCase();
+		callback(mpSubcommands.filter(([cmd]) => cmd.startsWith(lower)));
+	},
+	template([cmd, desc]: [string, string]) {
+		return `<b>!mp ${cmd}</b><span class="mp-desc"> — ${desc}</span>`;
+	},
+	replace([cmd]: [string, string]) {
+		return "$1" + cmd + " ";
+	},
+	index: 2,
+};
+
 const commandStrategy: StrategyProps = {
 	id: "commands",
 	match: /^\/(\w*)$/,
@@ -222,6 +265,7 @@ function enableAutocomplete(input: HTMLTextAreaElement) {
 		emojiStrategy,
 		nicksStrategy,
 		chanStrategy,
+		mpCommandStrategy,
 		commandStrategy,
 		foregroundColorStrategy,
 		backgroundColorStrategy,

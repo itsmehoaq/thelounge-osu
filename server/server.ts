@@ -22,6 +22,9 @@ import Auth from "./plugins/auth";
 import themes from "./plugins/packages/themes";
 themes.loadLocalThemes();
 
+import * as osuSettings from "./plugins/osuSettings";
+osuSettings.applyToConfig(osuSettings.load());
+
 import packages from "./plugins/packages/index";
 import {NetworkWithIrcFramework} from "./models/network";
 import Utils from "./command-line/utils";
@@ -711,6 +714,35 @@ function initializeClient(
 	};
 
 	socket.on("sessions:get", sendSessionList);
+
+	socket.on("osu:settings:get", () => {
+		socket.emit("osu:settings", osuSettings.load());
+	});
+
+	socket.on("osu:settings:save", (data) => {
+		if (!_.isPlainObject(data)) return;
+
+		const allowed = {
+			nick: typeof data.nick === "string" ? data.nick.trim() : undefined,
+			password: typeof data.password === "string" ? data.password : undefined,
+			host: typeof data.host === "string" ? data.host.trim() : undefined,
+			port: typeof data.port === "number" ? data.port : undefined,
+			tls: typeof data.tls === "boolean" ? data.tls : undefined,
+			customServers: Array.isArray(data.customServers) ? data.customServers : undefined,
+		};
+
+		// strip undefined keys
+		const patch = Object.fromEntries(
+			Object.entries(allowed).filter(([, v]) => v !== undefined)
+		) as Partial<import("./plugins/osuSettings").OsuIrcSettings>;
+
+		try {
+			osuSettings.save(patch);
+			socket.emit("osu:settings:saved", {success: true});
+		} catch (e) {
+			socket.emit("osu:settings:saved", {success: false, error: String(e)});
+		}
+	});
 
 	if (!Config.values.public) {
 		socket.on("setting:set", (newSetting) => {

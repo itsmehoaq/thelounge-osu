@@ -1,0 +1,214 @@
+@import "default.css";
+
+:root {
+	--body-color: #e8e8f0;
+	--body-color-muted: #9999bb;
+	--body-bg-color: #1a1a2e;
+	--button-color: #ff66aa;
+	--button-text-color-hover: #fff;
+	--overlay-bg-color: rgb(0 0 0 / 60%);
+	--link-color: #ff66aa;
+	--window-bg-color: #242436;
+	--window-heading-color: #9999bb;
+	--date-marker-color: rgb(255 102 170 / 40%);
+	--unread-marker-color: rgb(255 102 170 / 70%);
+	--highlight-bg-color: #2d1a2d;
+	--highlight-border-color: #ff66aa;
+	--upload-progressbar-color: #ff66aa;
+}
+
+body {
+	scrollbar-color: rgb(255 102 170 / 30%) rgb(0 0 0 / 20%);
+}
+
+.window {
+	box-shadow: 0 0 25px rgb(0 0 0 / 80%);
+}
+
+/* Sidebar */
+#sidebar {
+	color: #cc99bb;
+	background: #14141e;
+}
+
+#sidebar .scrollable-area {
+	scrollbar-color: rgb(255 102 170 / 20%) transparent;
+}
+
+.channel-list-item:hover,
+#footer button:hover {
+	background-color: rgb(255 102 170 / 12%);
+}
+
+#footer button.active,
+.channel-list-item.active {
+	background-color: rgb(255 102 170 / 22%);
+}
+
+#footer {
+	background: #14141e;
+	border-top-color: #2a1a2a;
+}
+
+/* Chat area */
+#chat .content,
+#chat .header,
+#chat .user-mode::before,
+#chat .userlist {
+	border-color: #2a2a40;
+}
+
+#chat .count::before {
+	color: #9999bb;
+}
+
+#chat .userlist .count {
+	background-color: #1e1e30;
+}
+
+#chat .userlist .user.active {
+	background-color: #1e1e30;
+}
+
+/* Message form */
+#form {
+	background-color: #1e1e30;
+	border-color: #2a2a40;
+	color: var(--body-color);
+}
+
+#form #nick {
+	background: #14141e;
+	color: #cc99bb;
+}
+
+/* Search */
+form.message-search input {
+	background-color: #1e1e30;
+}
+
+#chat form.message-search button {
+	color: #9999bb;
+}
+
+/* Buttons in header */
+#viewport .lt,
+#viewport .rt,
+#chat button.mentions,
+#chat button.menu,
+#chat button.close,
+#form #submit {
+	color: #9999bb;
+}
+
+/* Message types */
+#chat .msg[data-type="error"],
+#chat .msg[data-type="error"] .from {
+	color: #ff4488;
+}
+
+/* Code blocks */
+#chat .msg[data-type="monospace_block"] .text,
+code,
+.irc-monospace {
+	background: #1e1e30;
+	color: #e8e8f0;
+}
+
+kbd {
+	color: #eee;
+	text-shadow: 0 -1px 0 #000;
+	border-color: #000;
+	background-color: #2a2a40;
+	background-image: linear-gradient(rgb(0 0 0 / 25%), transparent);
+	box-shadow: 0 2px 0 #000, inset 0 1px 1px #555, inset 0 -1px 3px #111;
+}
+
+/* Embeds / link previews */
+#chat .toggle-content {
+	background: #1e1e30;
+	color: #e8e8f0;
+}
+
+#chat .toggle-content .body {
+	color: #9999bb;
+}
+
+/* Highlights */
+#chat .chat-view[data-type="channel"] .msg.highlight .time {
+	color: #ffbbdd;
+}
+
+/* Placeholders */
+#chat-container ::-moz-placeholder {
+	color: #9999bb;
+	opacity: 0.75;
+}
+
+#chat-container ::-webkit-input-placeholder {
+	color: #9999bb;
+	opacity: 0.75;
+}
+
+#chat-container :-ms-input-placeholder {
+	color: #9999bb;
+	opacity: 0.75;
+}
+
+/* Nick colors — shifted toward pink/purple palette */
+.user { color: #cc99bb; }
+
+.user.color-1  { color: #ff88cc; }
+.user.color-2  { color: #aaf09f; }
+.user.color-3  { color: #86efdc; }
+.user.color-4  { color: #cc88eb; }
+.user.color-5  { color: #ffaabb; }
+.user.color-6  { color: #ff8899; }
+.user.color-7  { color: #ff88bb; }
+.user.color-8  { color: #ffaadd; }
+.user.color-9  { color: #88aae8; }
+.user.color-10 { color: #aabbff; }
+.user.color-11 { color: #bb99ff; }
+.user.color-12 { color: #ffaaaa; }
+.user.color-13 { color: #ff77bb; }
+.user.color-14 { color: #ff66ee; }
+.user.color-15 { color: #88bbee; }
+.user.color-16 { color: #ff8877; }
+.user.color-17 { color: #ee9977; }
+.user.color-18 { color: #88ee88; }
+.user.color-19 { color: #ffccee; }
+.user.color-20 { color: #eeccaa; }
+.user.color-21 { color: #9999ee; }
+.user.color-22 { color: #eedd88; }
+.user.color-23 { color: #99ee77; }
+.user.color-24 { color: #ffbbcc; }
+.user.color-25 { color: #eeff77; }
+.user.color-26 { color: #ccff99; }
+.user.color-27 { color: #ffaaee; }
+.user.color-28 { color: #99eeff; }
+.user.color-29 { color: #9999ff; }
+.user.color-30 { color: #bb99ee; }
+.user.color-31 { color: #ff99ee; }
+.user.color-32 { color: #88ee88; }
+
+/* IRC color overrides for dark bg */
+.irc-fg2  { color: #3399ff; }
+.irc-fg5  { color: #ff66aa; }
+.irc-fg12 { color: #66bbff; }
+
+/* Connect window hint text */
+#connect .connect-row label {
+	color: #9999bb;
+}
+
+/* Settings / windows */
+.window .title {
+	color: var(--body-color);
+}
+
+/* !mp autocomplete dropdown entry description */
+.textcomplete-menu .mp-desc {
+	color: #9999bb;
+	font-size: 0.85em;
+	margin-left: 6px;
+}

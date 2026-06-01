@@ -1,5 +1,7 @@
 "use strict";
 
-module.exports = function () {
+const noop = function () {
 	return function () {};
 };
+noop.default = noop;
+module.exports = noop;
