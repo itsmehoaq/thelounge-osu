@@ -5,6 +5,7 @@ import {switchToChannel} from "../router";
 import {ClientChan, NetChan, ClientMessage} from "../types";
 import {SharedMsg, MessageType} from "../../../shared/types/msg";
 import {ChanType} from "../../../shared/types/chan";
+import {processBanchoMessage} from "../helpers/refHelper";
 
 let pop;
 
@@ -67,6 +68,10 @@ socket.on("msg", function (data) {
 	}
 
 	channel.messages.push(data.msg);
+
+	if (data.msg.from?.nick && data.msg.text) {
+		processBanchoMessage(data.msg.from.nick, data.msg.text);
+	}
 
 	if (data.msg.self) {
 		channel.firstUnread = data.msg.id;

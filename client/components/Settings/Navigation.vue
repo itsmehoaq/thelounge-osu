@@ -3,10 +3,11 @@
 	<aside class="settings-menu">
 		<h2>Settings</h2>
 		<ul role="navigation" aria-label="Settings tabs">
-			<SettingTabItem v-if="showGeneral" name="General" class-name="general" to="" />
-			<SettingTabItem name="Notifications" class-name="notifications" to="notifications" />
 			<SettingTabItem name="osu! IRC" class-name="account" to="account" />
+			<SettingTabItem name="Ref Helper" class-name="ref-helper" to="ref-helper" />
 			<SettingTabItem name="Quick Action" class-name="quick-buttons" to="quick-buttons" />
+			<SettingTabItem name="Notifications" class-name="notifications" to="notifications" />
+			<SettingTabItem v-if="showGeneral" name="General" class-name="general" to="" />
 		</ul>
 	</aside>
 </template>
@@ -82,6 +83,10 @@
 
 .settings-menu .quick-buttons::before {
 	content: "\f0e7"; /* https://fontawesome.com/icons/bolt */
+}
+
+.settings-menu .ref-helper::before {
+	content: "\f05b"; /* https://fontawesome.com/icons/crosshairs */
 }
 
 .settings-menu button:hover,

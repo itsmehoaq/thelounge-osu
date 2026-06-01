@@ -145,6 +145,35 @@ const defaultConfig = {
 	searchEnabled: {
 		default: false,
 	},
+	refHelperEnabled: {
+		default: false,
+	},
+	refWinCondition: {
+		default: "score",
+	},
+	refTeamMode: {
+		default: "headtohead",
+	},
+	refTeamSize: {
+		default: "2",
+	},
+	refShowWinnerHint: {
+		default: false,
+	},
+	refTimerDefault: {
+		default: "120",
+	},
+	refStartTimer: {
+		default: "10",
+	},
+	osuApiClientId: {
+		default: "",
+		sync: "never",
+	},
+	osuApiClientSecret: {
+		default: "",
+		sync: "never",
+	},
 };
 
 export const config = normalizeConfig(defaultConfig);

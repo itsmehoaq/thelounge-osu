@@ -38,9 +38,13 @@ socket.on("init", async function (data) {
 			return;
 		}
 
-		// If we are on an unknown route or still on SignIn component
-		// then we can open last known channel on server, or Connect window if none
-		if (!router.currentRoute?.value?.name || router.currentRoute?.value?.name === "SignIn") {
+		// If we are on an unknown route, SignIn, or have no networks (public mode
+		// fresh session), open the last known channel or the Connect window
+		if (
+			!router.currentRoute?.value?.name ||
+			router.currentRoute?.value?.name === "SignIn" ||
+			store.state.networks.length === 0
+		) {
 			const channel = store.getters.findChannel(data.active);
 
 			if (channel) {

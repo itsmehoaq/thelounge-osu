@@ -1,4 +1,11 @@
 <template>
+	<div
+		v-if="store.state.settings.refShowWinnerHint && winnerHint"
+		:class="['qa-winner-bar', {error: winnerHintError}]"
+	>
+		<span class="qa-winner-text">{{ winnerHint }}</span>
+		<button class="qa-winner-dismiss" @click="clearWinnerHint">×</button>
+	</div>
 	<div v-if="isVisible" id="osu-quick-actions">
 		<button class="qa-btn qa-settings" title="Settings" @click="openSettings">
 			<Settings :size="12" />
@@ -8,7 +15,7 @@
 		<button
 			class="qa-btn qa-timer"
 			:disabled="!store.state.isConnected"
-			title="!mp timer 120"
+			:title="`!mp timer ${store.state.settings.refTimerDefault || 120}`"
 			@click="sendTimer"
 		>
 			<Clock :size="12" />
@@ -17,7 +24,7 @@
 		<button
 			class="qa-btn qa-start"
 			:disabled="!store.state.isConnected"
-			title="!mp start"
+			:title="Number(store.state.settings.refStartTimer) > 0 ? `!mp start ${store.state.settings.refStartTimer}` : '!mp start'"
 			@click="sendStart"
 		>
 			<Play :size="12" />
@@ -58,6 +65,7 @@ import socket from "../js/socket";
 import type {ClientNetwork, ClientChan} from "../js/types";
 import {ChanType} from "../../shared/types/chan";
 import {customButtons, type QuickButton} from "../js/helpers/quickButtons";
+import {winnerHint, winnerHintError, clearWinnerHint} from "../js/helpers/refHelper";
 import * as LucideIcons from "lucide-vue-next";
 import {Settings, Clock, Play, Square, Zap} from "lucide-vue-next";
 
@@ -93,8 +101,14 @@ export default defineComponent({
 			void router.push("/settings/quick-buttons");
 		};
 
-		const sendTimer = () => send("!mp timer 120");
-		const sendStart = () => send("!mp start");
+		const sendTimer = () => {
+			const t = Number(store.state.settings.refTimerDefault) || 120;
+			send(`!mp timer ${t}`);
+		};
+		const sendStart = () => {
+			const t = Number(store.state.settings.refStartTimer);
+			send(t > 0 ? `!mp start ${t}` : "!mp start");
+		};
 		const sendAbort = () => send("!mp abort");
 
 		const runCustom = (btn: QuickButton) => {
@@ -107,6 +121,9 @@ export default defineComponent({
 			store,
 			isVisible,
 			customButtons,
+			winnerHint,
+			winnerHintError,
+			clearWinnerHint,
 			openSettings,
 			sendTimer,
 			sendStart,
@@ -189,5 +206,47 @@ export default defineComponent({
 
 .morning .qa-divider {
 	background: #28333d;
+}
+
+.qa-winner-bar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 4px 12px;
+	background: rgba(255, 102, 170, 0.1);
+	border-bottom: 1px solid rgba(255, 102, 170, 0.25);
+	font-size: 12px;
+	font-family: monospace;
+	color: #ff66aa;
+	gap: 8px;
+}
+
+.qa-winner-bar.error {
+	background: rgba(255, 68, 102, 0.08);
+	border-bottom-color: rgba(255, 68, 102, 0.2);
+	color: #ff4466;
+}
+
+.qa-winner-text {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.qa-winner-dismiss {
+	background: transparent;
+	border: none;
+	color: inherit;
+	opacity: 0.6;
+	cursor: pointer;
+	font-size: 14px;
+	line-height: 1;
+	padding: 0 2px;
+	flex-shrink: 0;
+}
+
+.qa-winner-dismiss:hover {
+	opacity: 1;
 }
 </style>

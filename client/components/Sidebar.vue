@@ -15,7 +15,6 @@
 					role="presentation"
 				/>
 				<span
-					v-if="isDevelopment"
 					title="The Lounge has been built in development mode"
 					:style="{
 						backgroundColor: '#ff9e18',
@@ -30,22 +29,6 @@
 			<NetworkList />
 		</div>
 		<footer id="footer">
-			<span
-				class="tooltipped tooltipped-n tooltipped-no-touch"
-				aria-label="Connect to network"
-				><router-link
-					v-slot:default="{navigate, isActive}"
-					to="/connect"
-					role="tab"
-					aria-controls="connect"
-				>
-					<button
-						:class="['icon', 'connect', {active: isActive}]"
-						:aria-selected="isActive"
-						@click="navigate"
-						@keypress.enter="navigate"
-					/> </router-link
-			></span>
 			<span class="tooltipped tooltipped-n tooltipped-no-touch" aria-label="Settings"
 				><router-link
 					v-slot:default="{navigate, isActive}"

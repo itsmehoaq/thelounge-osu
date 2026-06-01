@@ -16,6 +16,7 @@ import GeneralSettings from "../components/Settings/General.vue";
 import AccountSettings from "../components/Settings/Account.vue";
 import NotificationSettings from "../components/Settings/Notifications.vue";
 import QuickButtonsSettings from "../components/Settings/QuickButtons.vue";
+import RefHelperSettings from "../components/Settings/RefHelper.vue";
 import {ClientChan} from "./types";
 import {shouldShowGeneralSettings} from "./helpers/settingsTabs";
 
@@ -52,7 +53,7 @@ const router = createRouter({
 					component: GeneralSettings,
 					beforeEnter(to, from, next) {
 						if (!shouldShowGeneralSettings()) {
-							next({name: "Appearance"});
+							next({name: "Account"});
 							return;
 						}
 
@@ -79,6 +80,11 @@ const router = createRouter({
 					name: "QuickButtons",
 					path: "quick-buttons",
 					component: QuickButtonsSettings,
+				},
+				{
+					name: "RefHelper",
+					path: "ref-helper",
+					component: RefHelperSettings,
 				},
 			],
 		},
