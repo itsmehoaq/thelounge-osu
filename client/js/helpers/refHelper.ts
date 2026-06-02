@@ -116,7 +116,7 @@ function calculateWinner(
 	if (teamMode === "teamvs") {
 		const totals: Record<string, number> = {red: 0, blue: 0};
 		for (const s of passed) {
-			const team = s.team as string;
+			const team = (s.match?.team ?? s.team) as string;
 			if (team === "red" || team === "blue") {
 				totals[team] += getValue(s, winCondition);
 			}
