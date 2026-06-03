@@ -174,6 +174,19 @@ const defaultConfig = {
 		default: "",
 		sync: "never",
 	},
+	refQualEnabled: {
+		default: false,
+	},
+	refQualTotalRuns: {
+		default: "1",
+	},
+	refQualMappool: {
+		default: "",
+		sync: "never",
+	},
+	refQualEmergencyWord: {
+		default: "!stop",
+	},
 };
 
 export const config = normalizeConfig(defaultConfig);

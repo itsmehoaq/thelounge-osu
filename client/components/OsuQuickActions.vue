@@ -1,4 +1,28 @@
 <template>
+	<!-- Emergency stop banner -->
+	<div v-if="qualState === 'emergency'" class="qa-emergency-banner">
+		<span class="qa-emergency-icon">!</span>
+		<span class="qa-emergency-text">
+			<strong>EMERGENCY STOP</strong> &mdash;
+			<span class="qa-emergency-who">{{ qualEmergencyWho }}</span>:
+			{{ qualEmergencyMsg }}
+		</span>
+		<div class="qa-emergency-actions">
+			<button class="qa-btn" @click="resumeAfterEmergency">Dismiss</button>
+			<button class="qa-btn qa-danger" @click="abortQuals">Abort Quals</button>
+		</div>
+	</div>
+
+	<!-- Quals status bar -->
+	<div v-else-if="qualsRunning" class="qa-quals-bar">
+		<span class="qa-quals-map">
+			<strong>{{ currentQualMap?.label }}</strong>
+			({{ qualCurrentMapIdx + 1 }}/{{ qualMappool.length }})
+			&mdash; Run {{ qualCurrentRun }}/{{ qualTotalRuns }}
+		</span>
+		<span class="qa-quals-state">{{ qualStateLabel }}</span>
+	</div>
+
 	<div
 		v-if="store.state.settings.refShowWinnerHint && winnerHint"
 		:class="['qa-winner-bar', {error: winnerHintError}]"
@@ -40,6 +64,30 @@
 			<span class="qa-label">Abort</span>
 		</button>
 
+		<template v-if="store.state.settings.refQualEnabled">
+			<div class="qa-divider" />
+			<button
+				v-if="qualState === 'idle' || qualState === 'done'"
+				class="qa-btn qa-quals-start"
+				:disabled="!store.state.isConnected || !parsedMappool.length"
+				:title="`Start Qualifiers (${parsedMappool.length} maps, ${qualTotalRuns} run${qualTotalRuns > 1 ? 's' : ''})`"
+				@click="startQuals(channel.id)"
+			>
+				<Play :size="12" />
+				<span class="qa-label">Quals</span>
+			</button>
+			<button
+				v-else-if="qualState !== 'emergency'"
+				class="qa-btn qa-danger"
+				:disabled="!store.state.isConnected"
+				title="Abort Qualifiers"
+				@click="abortQuals"
+			>
+				<Square :size="12" />
+				<span class="qa-label">Abort Quals</span>
+			</button>
+		</template>
+
 		<template v-if="customButtons.length > 0">
 			<div class="qa-divider" />
 			<button
@@ -65,7 +113,21 @@ import socket from "../js/socket";
 import type {ClientNetwork, ClientChan} from "../js/types";
 import {ChanType} from "../../shared/types/chan";
 import {customButtons, type QuickButton} from "../js/helpers/quickButtons";
-import {winnerHint, winnerHintError, clearWinnerHint} from "../js/helpers/refHelper";
+import {
+	winnerHint,
+	winnerHintError,
+	clearWinnerHint,
+	qualState,
+	qualCurrentMapIdx,
+	qualCurrentRun,
+	qualMappool,
+	qualEmergencyWho,
+	qualEmergencyMsg,
+	startQuals,
+	abortQuals,
+	resumeAfterEmergency,
+	parseMappool,
+} from "../js/helpers/refHelper";
 import * as LucideIcons from "lucide-vue-next";
 import {Settings, Clock, Play, Square, Zap} from "lucide-vue-next";
 
@@ -117,6 +179,38 @@ export default defineComponent({
 			}
 		};
 
+		const qualsRunning = computed(
+			() =>
+				qualState.value !== "idle" &&
+				qualState.value !== "done" &&
+				qualState.value !== "emergency"
+		);
+
+		const currentQualMap = computed(() => qualMappool.value[qualCurrentMapIdx.value]);
+
+		const qualTotalRuns = computed(() => Number(store.state.settings.refQualTotalRuns) || 1);
+
+		const parsedMappool = computed(() =>
+			parseMappool(String(store.state.settings.refQualMappool ?? ""))
+		);
+
+		const qualStateLabel = computed(() => {
+			switch (qualState.value) {
+				case "setting_map":
+					return "Setting map…";
+				case "verifying":
+					return "Verifying…";
+				case "waiting_ready":
+					return "Waiting for players";
+				case "running":
+					return "Map running";
+				case "done":
+					return "Done";
+				default:
+					return "";
+			}
+		});
+
 		return {
 			store,
 			isVisible,
@@ -124,6 +218,20 @@ export default defineComponent({
 			winnerHint,
 			winnerHintError,
 			clearWinnerHint,
+			qualState,
+			qualCurrentMapIdx,
+			qualCurrentRun,
+			qualMappool,
+			qualEmergencyWho,
+			qualEmergencyMsg,
+			startQuals,
+			abortQuals,
+			resumeAfterEmergency,
+			parsedMappool,
+			qualsRunning,
+			currentQualMap,
+			qualTotalRuns,
+			qualStateLabel,
 			openSettings,
 			sendTimer,
 			sendStart,
@@ -248,5 +356,96 @@ export default defineComponent({
 
 .qa-winner-dismiss:hover {
 	opacity: 1;
+}
+
+/* Emergency banner */
+.qa-emergency-banner {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 12px;
+	background: rgba(255, 40, 70, 0.18);
+	border-bottom: 1px solid rgba(255, 40, 70, 0.5);
+	animation: qa-emergency-pulse 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes qa-emergency-pulse {
+	from { background: rgba(255, 40, 70, 0.12); }
+	to   { background: rgba(255, 40, 70, 0.28); }
+}
+
+.qa-emergency-icon {
+	font-size: 14px;
+	font-weight: 900;
+	color: #ff2846;
+	flex-shrink: 0;
+	width: 18px;
+	height: 18px;
+	border: 2px solid #ff2846;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	line-height: 1;
+}
+
+.qa-emergency-text {
+	flex: 1;
+	font-size: 12px;
+	font-family: monospace;
+	color: #ff6680;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.qa-emergency-who {
+	color: #ff99aa;
+}
+
+.qa-emergency-actions {
+	display: flex;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
+/* Quals status bar */
+.qa-quals-bar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 3px 12px;
+	background: rgba(255, 102, 170, 0.06);
+	border-bottom: 1px solid rgba(255, 102, 170, 0.15);
+	font-size: 11px;
+	font-family: monospace;
+	color: #9999bb;
+	gap: 8px;
+}
+
+.qa-quals-map {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.qa-quals-map strong {
+	color: #ff66aa;
+}
+
+.qa-quals-state {
+	flex-shrink: 0;
+	color: #6666aa;
+	font-size: 10px;
+}
+
+.qa-btn.qa-quals-start:not(:disabled) {
+	color: #66ddaa;
+}
+
+.qa-btn.qa-quals-start:hover:not(:disabled) {
+	color: #66ddaa;
+	background: rgba(102, 221, 170, 0.09);
+	border-color: rgba(102, 221, 170, 0.2);
 }
 </style>

@@ -1,6 +1,9 @@
 import {ref} from "vue";
 import {store} from "../store";
 import {getOsuToken, fetchOsuMatch} from "./osuApi";
+import socket from "../socket";
+
+// ─── Winner hint ────────────────────────────────────────────────────────────
 
 export const winnerHint = ref<string | null>(null);
 export const winnerHintError = ref(false);
@@ -12,9 +15,207 @@ export function clearWinnerHint() {
 	winnerHintError.value = false;
 }
 
+// ─── Qualifiers automation ───────────────────────────────────────────────────
+
+type QualState = "idle" | "setting_map" | "verifying" | "waiting_ready" | "running" | "done" | "emergency";
+
+export interface QualMap {
+	label: string;
+	id: string;
+}
+
+export const qualState = ref<QualState>("idle");
+export const qualCurrentMapIdx = ref(0);
+export const qualCurrentRun = ref(1);
+export const qualMappool = ref<QualMap[]>([]);
+export const qualEmergencyWho = ref<string | null>(null);
+export const qualEmergencyMsg = ref<string | null>(null);
+
+let qualsChannelId: number | null = null;
+let awaitingSettings = false;
+let expectedMapId: string | null = null;
+
+const MOD_MAP: Record<string, string> = {
+	NM: "none",
+	HD: "freemod",
+	HR: "freemod",
+	DT: "DT",
+	NC: "NC",
+	FM: "freemod",
+	EZ: "EZ",
+	FL: "freemod",
+	TB: "freemod",
+};
+
+export function parseMappool(raw: string): QualMap[] {
+	return raw
+		.split("\n")
+		.map((l) => l.split("\t"))
+		.filter((cols) => cols.length >= 2 && /^\d+$/.test(cols[1].trim()))
+		.map((cols) => ({label: cols[0].trim(), id: cols[1].trim()}));
+}
+
+export function startQuals(channelId: number) {
+	const raw = String(store.state.settings.refQualMappool ?? "");
+	const maps = parseMappool(raw);
+	if (!maps.length) return;
+
+	qualsChannelId = channelId;
+	qualMappool.value = maps;
+	qualCurrentMapIdx.value = 0;
+	qualCurrentRun.value = 1;
+	qualEmergencyWho.value = null;
+	qualEmergencyMsg.value = null;
+	awaitingSettings = false;
+	expectedMapId = null;
+
+	setNextMap();
+}
+
+export function abortQuals() {
+	qualState.value = "idle";
+	qualsChannelId = null;
+	awaitingSettings = false;
+	expectedMapId = null;
+	qualEmergencyWho.value = null;
+	qualEmergencyMsg.value = null;
+}
+
+export function resumeAfterEmergency() {
+	qualEmergencyWho.value = null;
+	qualEmergencyMsg.value = null;
+	qualState.value = "idle";
+}
+
+function setNextMap() {
+	const map = qualMappool.value[qualCurrentMapIdx.value];
+	if (!map) {
+		qualState.value = "done";
+		return;
+	}
+	expectedMapId = map.id;
+	const prefix = map.label.replace(/\d+$/, "").toUpperCase();
+	const mod = MOD_MAP[prefix] ?? "none";
+	sendQualCmd(`!mp map ${map.id}`);
+	sendQualCmd(`!mp mods ${mod}`);
+	qualState.value = "setting_map";
+}
+
+function sendQualCmd(cmd: string) {
+	if (qualsChannelId === null) return;
+	socket.emit("input", {target: qualsChannelId, text: cmd});
+}
+
+function playEmergencyBeeps() {
+	for (let i = 0; i < 3; i++) {
+		setTimeout(() => {
+			try {
+				const a = new Audio("audio/pop.wav");
+				void a.play();
+			} catch {}
+		}, i * 350);
+	}
+}
+
+function triggerEmergency(nick: string, text: string) {
+	qualState.value = "emergency";
+	qualEmergencyWho.value = nick;
+	qualEmergencyMsg.value = text;
+
+	playEmergencyBeeps();
+
+	if (
+		store.state.settings.desktopNotifications &&
+		"Notification" in window &&
+		Notification.permission === "granted"
+	) {
+		try {
+			new Notification("EMERGENCY STOP", {body: `${nick}: ${text}`});
+		} catch {}
+	}
+}
+
+function processQualsMessage(text: string) {
+	// Accumulate !mp settings response — look for Beatmap line
+	if (awaitingSettings) {
+		const m = text.match(/osu\.ppy\.sh\/(?:b|beatmaps)\/(\d+)|beatmapsets\/\d+#\w+\/(\d+)/);
+		if (m && /^Beatmap:/i.test(text)) {
+			const foundId = m[1] ?? m[2];
+			awaitingSettings = false;
+			if (foundId === expectedMapId) {
+				qualState.value = "waiting_ready";
+				sendQualCmd("!mp timer 120");
+			} else {
+				// Map not set yet — retry
+				setNextMap();
+			}
+		}
+		return;
+	}
+
+	switch (qualState.value) {
+		case "setting_map":
+			if (/Beatmap changed to:/i.test(text)) {
+				qualState.value = "verifying";
+				sendQualCmd("!mp settings");
+				awaitingSettings = true;
+			}
+			break;
+
+		case "waiting_ready":
+			if (/All players are ready/i.test(text)) {
+				qualState.value = "running";
+				sendQualCmd("!mp start 10");
+			} else if (/Countdown (has ended|finished)/i.test(text)) {
+				qualState.value = "running";
+				sendQualCmd("!mp start 10");
+			}
+			break;
+
+		case "running":
+			if (/The match has finished/i.test(text)) {
+				advanceQuals();
+			}
+			break;
+	}
+}
+
+function advanceQuals() {
+	const totalRuns = Number(store.state.settings.refQualTotalRuns) || 1;
+	const totalMaps = qualMappool.value.length;
+
+	if (qualCurrentMapIdx.value < totalMaps - 1) {
+		qualCurrentMapIdx.value++;
+		setNextMap();
+	} else if (qualCurrentRun.value < totalRuns) {
+		qualCurrentRun.value++;
+		qualCurrentMapIdx.value = 0;
+		setNextMap();
+	} else {
+		qualState.value = "done";
+	}
+}
+
+// ─── BanchoBot message router ─────────────────────────────────────────────────
+
 export function processBanchoMessage(nick: string, text: string) {
-	if (nick !== "BanchoBot") return;
 	if (!store.state.settings.refHelperEnabled) return;
+
+	const qualsActive =
+		qualState.value !== "idle" &&
+		qualState.value !== "done" &&
+		qualState.value !== "emergency";
+
+	// Emergency word — any player, any message
+	if (qualsActive && nick !== "BanchoBot") {
+		const eWord = String(store.state.settings.refQualEmergencyWord ?? "").trim();
+		if (eWord && text.toLowerCase().includes(eWord.toLowerCase())) {
+			triggerEmergency(nick, text);
+		}
+		return;
+	}
+
+	if (nick !== "BanchoBot") return;
 
 	// Capture match ID when room is created
 	const matchUrlMatch = text.match(/osu\.ppy\.sh\/mp\/(\d+)/);
@@ -23,11 +224,19 @@ export function processBanchoMessage(nick: string, text: string) {
 		return;
 	}
 
-	// Trigger fetch when map finishes
+	// Quals state machine takes priority when active
+	if (qualsActive) {
+		processQualsMessage(text);
+		return;
+	}
+
+	// Winner hint (normal mode)
 	if (/The match has finished/i.test(text)) {
 		void fetchAndCalculate();
 	}
 }
+
+// ─── Winner hint logic ────────────────────────────────────────────────────────
 
 async function fetchAndCalculate() {
 	if (!store.state.settings.refShowWinnerHint) return;
@@ -124,7 +333,10 @@ function calculateWinner(
 		const redWins = totals.red >= totals.blue;
 		const winner = redWins ? "Red" : "Blue";
 		const diff = Math.abs(totals.red - totals.blue);
-		const diffStr = winCondition === "accuracy" ? `${(diff * 100).toFixed(2)}%` : diff.toLocaleString();
+		const diffStr =
+			winCondition === "accuracy"
+				? `${(diff * 100).toFixed(2)}%`
+				: diff.toLocaleString();
 		return `${winner} team wins  (+${diffStr})`;
 	}
 
@@ -136,7 +348,6 @@ function calculateWinner(
 	return `${name}  ${formatValue(val, winCondition)}`;
 }
 
-// Expose current match ID for display
 export function getCurrentMatchId(): string | null {
 	return currentMatchId;
 }

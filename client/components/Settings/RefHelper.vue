@@ -167,6 +167,83 @@
 				</div>
 			</div>
 
+			<div class="rh-block">
+				<p class="rh-section-label">Qualifiers Automation</p>
+
+				<div class="opt rh-inline-toggle">
+					<label>
+						<input
+							:checked="store.state.settings.refQualEnabled"
+							type="checkbox"
+							name="refQualEnabled"
+						/>
+						Enable Qualifiers Automation
+					</label>
+				</div>
+				<p class="osu-hint rh-hint-note">
+					Automates the map sequence: sets maps, waits for ready / timer, starts each map, advances through the pool.
+					Set up the room manually before starting.
+				</p>
+
+				<template v-if="store.state.settings.refQualEnabled">
+					<div class="osu-field">
+						<label class="osu-label">Total runs</label>
+						<div class="rh-radio-group">
+							<label class="rh-radio-opt">
+								<input
+									:checked="store.state.settings.refQualTotalRuns === '1'"
+									type="radio"
+									name="refQualTotalRuns"
+									value="1"
+								/>
+								1 run
+							</label>
+							<label class="rh-radio-opt">
+								<input
+									:checked="store.state.settings.refQualTotalRuns === '2'"
+									type="radio"
+									name="refQualTotalRuns"
+									value="2"
+								/>
+								2 runs
+							</label>
+						</div>
+					</div>
+
+					<div class="osu-field">
+						<label for="rh-qual-mappool" class="osu-label">Mappool</label>
+						<p class="osu-hint">
+							Paste from spreadsheet (tab-separated):
+							<code class="rh-inline-code">NM1[tab]beatmapID</code> one per line.
+							Mod is auto-set from the label prefix (NM, HD, HR, DT, FM, TB…).
+						</p>
+						<textarea
+							id="rh-qual-mappool"
+							:value="store.state.settings.refQualMappool"
+							name="refQualMappool"
+							class="input rh-mappool-textarea"
+							placeholder="NM1&#9;1234567&#10;NM2&#9;2345678&#10;HD1&#9;3456789"
+							spellcheck="false"
+							@keydown.stop
+						/>
+					</div>
+
+					<div class="osu-field">
+						<label for="rh-qual-emergency" class="osu-label">Emergency stop keyword</label>
+						<p class="osu-hint">Any player typing this pauses automation and triggers an alert.</p>
+						<input
+							id="rh-qual-emergency"
+							:value="store.state.settings.refQualEmergencyWord"
+							type="text"
+							name="refQualEmergencyWord"
+							class="input rh-api-input"
+							placeholder="!stop"
+							@keydown.stop
+						/>
+					</div>
+				</template>
+			</div>
+
 		</fieldset>
 	</div>
 </template>
@@ -278,5 +355,14 @@ export default defineComponent({
 
 .rh-api-input {
 	max-width: 200px;
+}
+
+.rh-mappool-textarea {
+	width: 100%;
+	min-height: 120px;
+	font-family: monospace;
+	font-size: 12px;
+	resize: vertical;
+	tab-size: 4;
 }
 </style>
