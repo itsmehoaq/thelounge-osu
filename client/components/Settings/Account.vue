@@ -43,6 +43,35 @@
 			</RevealPassword>
 		</div>
 
+		<!-- osu! credentials -->
+		<div class="opt osu-field">
+			<label class="osu-label">osu! credentials</label>
+			<p class="osu-hint">
+				Create an OAuth application at osu! settings → OAuth using Client Credentials grant.
+				Required for winner hints.
+			</p>
+			<input
+				:value="store.state.settings.osuApiClientId"
+				type="text"
+				name="osuApiClientId"
+				class="input"
+				placeholder="12345"
+				autocomplete="off"
+				@keydown.stop
+			/>
+			<RevealPassword v-slot:default="slotProps" class="input-wrap password-container">
+				<input
+					:value="store.state.settings.osuApiClientSecret"
+					:type="slotProps.isVisible ? 'text' : 'password'"
+					name="osuApiClientSecret"
+					class="input"
+					placeholder="Client secret"
+					autocomplete="off"
+					@keydown.stop
+				/>
+			</RevealPassword>
+		</div>
+
 		<div class="osu-save-row">
 			<button type="button" class="btn" @click="saveAndReconnect">Save &amp; Reconnect</button>
 		</div>
@@ -97,7 +126,7 @@ export default defineComponent({
 			setTimeout(() => router.push("/connect"), 400);
 		};
 
-		return {form, saveStatus, saveAndReconnect};
+		return {store, form, saveStatus, saveAndReconnect};
 	},
 });
 </script>

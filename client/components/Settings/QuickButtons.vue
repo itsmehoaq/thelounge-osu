@@ -1,6 +1,44 @@
 <template>
 	<div>
 		<h2>Quick action buttons</h2>
+
+		<div class="rh-block">
+			<p class="rh-section-label">Timer Defaults</p>
+
+			<div class="osu-field">
+				<label for="qb-timer-default" class="osu-label">
+					Countdown timer
+					<span class="rh-cmd-preview">!mp timer &lt;n&gt;</span>
+				</label>
+				<input
+					id="qb-timer-default"
+					:value="store.state.settings.refTimerDefault"
+					type="number"
+					name="refTimerDefault"
+					class="input rh-number-input"
+					min="0"
+					max="600"
+				/>
+			</div>
+
+			<div class="osu-field">
+				<label for="qb-start-timer" class="osu-label">
+					Start countdown
+					<span class="rh-cmd-preview">!mp start &lt;n&gt;</span>
+				</label>
+				<p class="osu-hint">Set to 0 for instant start</p>
+				<input
+					id="qb-start-timer"
+					:value="store.state.settings.refStartTimer"
+					type="number"
+					name="refStartTimer"
+					class="input rh-number-input"
+					min="0"
+					max="600"
+				/>
+			</div>
+		</div>
+
 		<p class="qb-hint">
 			Built-in buttons (Settings, Timer, Start, Abort) always appear. Add custom buttons
 			below to send one or more commands in sequence.
@@ -106,6 +144,7 @@
 import {defineComponent, ref, computed} from "vue";
 import * as LucideIcons from "lucide-vue-next";
 import {Zap} from "lucide-vue-next";
+import {useStore} from "../../js/store";
 import {
 	customButtons,
 	addButton,
@@ -125,6 +164,7 @@ function resolveIcon(name?: string) {
 export default defineComponent({
 	name: "QuickButtonsSettings",
 	setup() {
+		const store = useStore();
 		const formOpen = ref(false);
 		const editingId = ref<string | null>(null);
 		const formLabel = ref("");
@@ -194,6 +234,7 @@ export default defineComponent({
 		};
 
 		return {
+			store,
 			customButtons,
 			formOpen,
 			editingId,

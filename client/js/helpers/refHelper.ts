@@ -22,6 +22,7 @@ type QualState = "idle" | "setting_map" | "verifying" | "waiting_ready" | "runni
 export interface QualMap {
 	label: string;
 	id: string;
+	mod: string;
 }
 
 export const qualState = ref<QualState>("idle");
@@ -52,12 +53,22 @@ export function parseMappool(raw: string): QualMap[] {
 		.split("\n")
 		.map((l) => l.split("\t"))
 		.filter((cols) => cols.length >= 2 && /^\d+$/.test(cols[1].trim()))
-		.map((cols) => ({label: cols[0].trim(), id: cols[1].trim()}));
+		.map((cols) => {
+			const label = cols[0].trim();
+			const prefix = label.replace(/\d+$/, "").toUpperCase();
+			const mod = MOD_MAP[prefix] ?? "none";
+			return {label, id: cols[1].trim(), mod};
+		});
 }
 
 export function startQuals(channelId: number) {
-	const raw = String(store.state.settings.refQualMappool ?? "");
-	const maps = parseMappool(raw);
+	let maps: QualMap[] = [];
+	try {
+		const parsed = JSON.parse(String(store.state.settings.refQualMappoolParsed ?? ""));
+		if (Array.isArray(parsed)) maps = parsed;
+	} catch {
+		maps = [];
+	}
 	if (!maps.length) return;
 
 	qualsChannelId = channelId;
@@ -68,6 +79,12 @@ export function startQuals(channelId: number) {
 	qualEmergencyMsg.value = null;
 	awaitingSettings = false;
 	expectedMapId = null;
+
+	const emergencyWord = String(store.state.settings.refQualEmergencyWord ?? "");
+	sendQualCmd("Notice: Automation mode is active.");
+	sendQualCmd(
+		`In case of players requiring support, please send "${emergencyWord}" in chat to stop and wait for ref`
+	);
 
 	setNextMap();
 }
@@ -94,10 +111,8 @@ function setNextMap() {
 		return;
 	}
 	expectedMapId = map.id;
-	const prefix = map.label.replace(/\d+$/, "").toUpperCase();
-	const mod = MOD_MAP[prefix] ?? "none";
 	sendQualCmd(`!mp map ${map.id}`);
-	sendQualCmd(`!mp mods ${mod}`);
+	sendQualCmd(`!mp mods ${map.mod}`);
 	qualState.value = "setting_map";
 }
 

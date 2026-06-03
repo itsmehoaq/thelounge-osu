@@ -70,101 +70,14 @@
 						max="8"
 					/>
 				</div>
-			</div>
-
-			<div class="rh-block">
-				<p class="rh-section-label">Winner Hint</p>
 
 				<div class="opt rh-inline-toggle">
 					<label>
-						<input
-							:checked="store.state.settings.refShowWinnerHint"
-							type="checkbox"
-							name="refShowWinnerHint"
-						/>
+						<input :checked="store.state.settings.refShowWinnerHint" type="checkbox" name="refShowWinnerHint" />
 						Show winner hint after each map
 					</label>
 				</div>
-				<p class="osu-hint rh-hint-note">
-					Parses BanchoBot match results and shows the likely winner inline.
-					Requires osu! APIv2 credentials below for Accuracy / Combo modes.
-				</p>
-			</div>
-
-			<div class="rh-block">
-				<p class="rh-section-label">osu! API Credentials</p>
-				<p class="osu-hint rh-hint-note">
-					Create an OAuth application at
-					<a href="https://osu.ppy.sh/home/account/edit#oauth" target="_blank" rel="noopener">osu! settings → OAuth</a>
-					using <em>Client Credentials</em> grant. Required for winner hints.
-				</p>
-
-				<div class="osu-field">
-					<label for="rh-api-client-id" class="osu-label">Client ID</label>
-					<input
-						id="rh-api-client-id"
-						:value="store.state.settings.osuApiClientId"
-						type="text"
-						name="osuApiClientId"
-						class="input rh-api-input"
-						placeholder="12345"
-						autocomplete="off"
-						@keydown.stop
-					/>
-				</div>
-
-				<div class="osu-field">
-					<label for="rh-api-client-secret" class="osu-label">Client Secret</label>
-					<RevealPassword v-slot:default="slotProps" class="input-wrap password-container">
-						<input
-							id="rh-api-client-secret"
-							:value="store.state.settings.osuApiClientSecret"
-							:type="slotProps.isVisible ? 'text' : 'password'"
-							name="osuApiClientSecret"
-							class="input"
-							placeholder="Client secret"
-							autocomplete="off"
-							@keydown.stop
-						/>
-					</RevealPassword>
-				</div>
-			</div>
-
-			<div class="rh-block">
-				<p class="rh-section-label">Timer Defaults</p>
-
-				<div class="osu-field">
-					<label for="rh-timer-default" class="osu-label">
-						Countdown timer
-						<span class="rh-cmd-preview">!mp timer &lt;n&gt;</span>
-					</label>
-					<input
-						id="rh-timer-default"
-						:value="store.state.settings.refTimerDefault"
-						type="number"
-						name="refTimerDefault"
-						class="input rh-number-input"
-						min="0"
-						max="600"
-					/>
-				</div>
-
-				<div class="osu-field">
-					<label for="rh-start-timer" class="osu-label">
-						Start countdown
-						<span class="rh-cmd-preview">!mp start &lt;n&gt;</span>
-					</label>
-					<p class="osu-hint">Set to 0 for instant start (<code class="rh-inline-code">!mp start</code>).</p>
-					<input
-						id="rh-start-timer"
-						:value="store.state.settings.refStartTimer"
-						type="number"
-						name="refStartTimer"
-						class="input rh-number-input"
-						min="0"
-						max="600"
-					/>
-				</div>
+				<p class="osu-hint rh-hint-note">Requires osu! API credentials (set in osu! IRC settings).</p>
 			</div>
 
 			<div class="rh-block">
@@ -181,8 +94,8 @@
 					</label>
 				</div>
 				<p class="osu-hint rh-hint-note">
-					Automates the map sequence: sets maps, waits for ready / timer, starts each map, advances through the pool.
-					Set up the room manually before starting.
+					Warning: Referee is still required to actively monitor the mp chat. In case of
+					players having trouble, ref should be ready to intervene and help as needed.
 				</p>
 
 				<template v-if="store.state.settings.refQualEnabled">
@@ -226,6 +139,28 @@
 							spellcheck="false"
 							@keydown.stop
 						/>
+						<button type="button" class="btn btn-small rh-import-btn" @click="importMappool">
+							Import
+						</button>
+
+						<div v-if="parsedMaps.length" class="rh-map-grid">
+							<div class="rh-map-grid-head">
+								<span>Label</span>
+								<span>Map ID</span>
+								<span>Mod command</span>
+							</div>
+							<div v-for="(m, i) in parsedMaps" :key="i" class="rh-map-row">
+								<span class="rh-map-label">{{ m.label }}</span>
+								<span class="rh-map-id">{{ m.id }}</span>
+								<input
+									:value="m.mod"
+									type="text"
+									class="input rh-map-mod-input"
+									@keydown.stop
+									@change="onModChange(i, $event)"
+								/>
+							</div>
+						</div>
 					</div>
 
 					<div class="osu-field">
@@ -237,7 +172,7 @@
 							type="text"
 							name="refQualEmergencyWord"
 							class="input rh-api-input"
-							placeholder="!stop"
+							placeholder="!panic"
 							@keydown.stop
 						/>
 					</div>
@@ -249,16 +184,44 @@
 </template>
 
 <script lang="ts">
-import {defineComponent} from "vue";
+import {defineComponent, ref} from "vue";
 import {useStore} from "../../js/store";
-import RevealPassword from "../RevealPassword.vue";
+import {parseMappool, type QualMap} from "../../js/helpers/refHelper";
 
 export default defineComponent({
 	name: "RefHelperSettings",
-	components: {RevealPassword},
 	setup() {
 		const store = useStore();
-		return {store};
+
+		const parsedMaps = ref<QualMap[]>([]);
+
+		try {
+			const stored = JSON.parse(String(store.state.settings.refQualMappoolParsed ?? ""));
+			if (Array.isArray(stored)) parsedMaps.value = stored;
+		} catch {
+			parsedMaps.value = [];
+		}
+
+		const persist = () => {
+			void store.dispatch("settings/update", {
+				name: "refQualMappoolParsed",
+				value: JSON.stringify(parsedMaps.value),
+				sync: true,
+			});
+		};
+
+		const importMappool = () => {
+			parsedMaps.value = parseMappool(String(store.state.settings.refQualMappool ?? ""));
+			persist();
+		};
+
+		const onModChange = (i: number, event: Event) => {
+			const target = event.target as HTMLInputElement;
+			parsedMaps.value[i].mod = target.value;
+			persist();
+		};
+
+		return {store, parsedMaps, importMappool, onModChange};
 	},
 });
 </script>
@@ -364,5 +327,52 @@ export default defineComponent({
 	font-size: 12px;
 	resize: vertical;
 	tab-size: 4;
+}
+
+.rh-import-btn {
+	margin-top: 8px;
+}
+
+.rh-map-grid {
+	margin-top: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.rh-map-grid-head,
+.rh-map-row {
+	display: grid;
+	grid-template-columns: 80px 100px 1fr;
+	gap: 8px;
+	align-items: center;
+}
+
+.rh-map-grid-head {
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--body-color-muted);
+	padding-bottom: 2px;
+	border-bottom: 1px solid #2a2a40;
+}
+
+.rh-map-label {
+	font-family: monospace;
+	font-size: 12px;
+	font-weight: 600;
+	color: #ff66aa;
+}
+
+.rh-map-id {
+	font-family: monospace;
+	font-size: 12px;
+	color: var(--body-color-muted);
+}
+
+.rh-map-mod-input {
+	font-family: monospace;
+	font-size: 12px;
 }
 </style>

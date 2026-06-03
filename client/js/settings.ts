@@ -185,7 +185,11 @@ const defaultConfig = {
 		sync: "never",
 	},
 	refQualEmergencyWord: {
-		default: "!stop",
+		default: "!panic",
+	},
+	refQualMappoolParsed: {
+		default: "",
+		sync: "never",
 	},
 };
 

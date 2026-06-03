@@ -1,4 +1,12 @@
 <template>
+	<!-- Quals automation warning banner -->
+	<div
+		v-if="store.state.settings.refQualEnabled && qualState !== 'emergency'"
+		class="qa-quals-warning"
+	>
+		⚠ WARNING: Qualifiers Automation is enabled!
+	</div>
+
 	<!-- Emergency stop banner -->
 	<div v-if="qualState === 'emergency'" class="qa-emergency-banner">
 		<span class="qa-emergency-icon">!</span>
@@ -190,9 +198,13 @@ export default defineComponent({
 
 		const qualTotalRuns = computed(() => Number(store.state.settings.refQualTotalRuns) || 1);
 
-		const parsedMappool = computed(() =>
-			parseMappool(String(store.state.settings.refQualMappool ?? ""))
-		);
+		const parsedMappool = computed(() => {
+			try {
+				const stored = JSON.parse(String(store.state.settings.refQualMappoolParsed ?? ""));
+				if (Array.isArray(stored) && stored.length) return stored;
+			} catch {}
+			return [];
+		});
 
 		const qualStateLabel = computed(() => {
 			switch (qualState.value) {
@@ -356,6 +368,17 @@ export default defineComponent({
 
 .qa-winner-dismiss:hover {
 	opacity: 1;
+}
+
+/* Quals automation warning banner */
+.qa-quals-warning {
+	padding: 4px 12px;
+	background: rgba(255, 191, 0, 0.08);
+	border-bottom: 1px solid rgba(255, 191, 0, 0.3);
+	color: #ffbf00;
+	font-family: monospace;
+	font-size: 11px;
+	letter-spacing: 0.04em;
 }
 
 /* Emergency banner */
