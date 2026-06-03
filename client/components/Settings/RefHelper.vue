@@ -99,6 +99,21 @@
 				</p>
 
 				<template v-if="store.state.settings.refQualEnabled">
+					<div class="opt rh-inline-toggle">
+						<label>
+							<input
+								:checked="store.state.settings.refQualNfEnabled"
+								type="checkbox"
+								name="refQualNfEnabled"
+							/>
+							NoFail (NF) by default
+						</label>
+					</div>
+					<p class="osu-hint rh-hint-note">
+						Appends <code class="rh-inline-code">nf</code> to all mod commands except Freemod
+						(e.g. <code class="rh-inline-code">!mp mods nf</code>, <code class="rh-inline-code">!mp mods hd nf</code>).
+					</p>
+
 					<div class="osu-field">
 						<label class="osu-label">Total runs</label>
 						<div class="rh-radio-group">

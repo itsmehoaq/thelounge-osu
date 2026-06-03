@@ -37,14 +37,14 @@ let awaitingSettings = false;
 let expectedMapId: string | null = null;
 
 const MOD_MAP: Record<string, string> = {
-	NM: "none",
-	HD: "freemod",
-	HR: "freemod",
-	DT: "DT",
-	NC: "NC",
+	NM: "",
+	HD: "hd",
+	HR: "hr",
+	DT: "dt",
+	NC: "nc",
 	FM: "freemod",
-	EZ: "EZ",
-	FL: "freemod",
+	EZ: "ez",
+	FL: "fl",
 	TB: "freemod",
 };
 
@@ -56,7 +56,7 @@ export function parseMappool(raw: string): QualMap[] {
 		.map((cols) => {
 			const label = cols[0].trim();
 			const prefix = label.replace(/\d+$/, "").toUpperCase();
-			const mod = MOD_MAP[prefix] ?? "none";
+			const mod = MOD_MAP[prefix] ?? "freemod";
 			return {label, id: cols[1].trim(), mod};
 		});
 }
@@ -111,8 +111,14 @@ function setNextMap() {
 		return;
 	}
 	expectedMapId = map.id;
+
+	let mod = map.mod;
+	if (store.state.settings.refQualNfEnabled && mod !== "freemod") {
+		mod = mod ? `${mod} nf` : "nf";
+	}
+
 	sendQualCmd(`!mp map ${map.id}`);
-	sendQualCmd(`!mp mods ${map.mod}`);
+	sendQualCmd(`!mp mods ${mod}`.trimEnd());
 	qualState.value = "setting_map";
 }
 

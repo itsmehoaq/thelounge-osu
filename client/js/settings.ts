@@ -191,6 +191,9 @@ const defaultConfig = {
 		default: "",
 		sync: "never",
 	},
+	refQualNfEnabled: {
+		default: false,
+	},
 };
 
 export const config = normalizeConfig(defaultConfig);
