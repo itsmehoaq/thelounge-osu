@@ -7,3 +7,7 @@ package-lock.json
 coverage/
 public/
 dist/
+
+.claude/
+test-osu-api.mjs
+test-osu-api-response.json
