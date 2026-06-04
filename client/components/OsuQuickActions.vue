@@ -158,10 +158,7 @@ export default defineComponent({
 		const store = useStore();
 		const router = useRouter();
 
-		const isVisible = computed(
-			() =>
-				props.channel.type === ChanType.CHANNEL || props.channel.type === ChanType.QUERY
-		);
+		const isVisible = computed(() => /^#mp_/i.test(props.channel.name));
 
 		const send = (text: string) => {
 			socket.emit("input", {target: props.channel.id, text});
