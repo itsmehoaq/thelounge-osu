@@ -87,6 +87,7 @@ class Chan {
 		}
 
 		client.emit("msg", {chan: chanId, msg, unread: this.unread, highlight: this.highlight});
+		this.messages.push(msg);
 
 		// Never store messages in public mode as the session
 		// is completely destroyed when the page gets closed
@@ -233,8 +234,6 @@ class Chan {
 	}
 
 	writeUserLog(client: Client, msg: Msg) {
-		this.messages.push(msg);
-
 		// Are there any logs enabled
 		if (client.messageStorage.length === 0) {
 			return;

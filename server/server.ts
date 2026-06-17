@@ -459,7 +459,36 @@ function initializeClient(
 
 	socket.on("input", (data) => {
 		if (_.isPlainObject(data)) {
+			const shouldSaveChatLog =
+				typeof data.target === "number" &&
+				typeof data.text === "string" &&
+				data.text.split("\n").some((line) => /^\s*!mp\s+close\b/i.test(line));
+
 			client.input(data);
+
+			if (shouldSaveChatLog) {
+				setTimeout(() => emitChatLog(data.target), 1000);
+			}
+		}
+	});
+
+	const emitChatLog = (target: number) => {
+		const targetNetChan = client.find(target);
+
+		if (!targetNetChan) {
+			return;
+		}
+
+		socket.emit("chatlog:data", {
+			target: targetNetChan.chan.id,
+			channelName: targetNetChan.chan.name,
+			messages: targetNetChan.chan.messages,
+		});
+	};
+
+	socket.on("chatlog:get", (data) => {
+		if (_.isPlainObject(data) && typeof data.target === "number") {
+			emitChatLog(data.target);
 		}
 	});
 

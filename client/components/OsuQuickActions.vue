@@ -12,7 +12,8 @@
 		<span class="qa-emergency-icon">!</span>
 		<span class="qa-emergency-text">
 			<strong>EMERGENCY STOP</strong> &mdash;
-			<span class="qa-emergency-who">{{ qualEmergencyWho }}</span>:
+			<span class="qa-emergency-who">{{ qualEmergencyWho }}</span
+			>:
 			{{ qualEmergencyMsg }}
 		</span>
 		<div class="qa-emergency-actions">
@@ -25,8 +26,8 @@
 	<div v-else-if="qualsRunning" class="qa-quals-bar">
 		<span class="qa-quals-map">
 			<strong>{{ currentQualMap?.label }}</strong>
-			({{ qualCurrentMapIdx + 1 }}/{{ qualMappool.length }})
-			&mdash; Run {{ qualCurrentRun }}/{{ qualTotalRuns }}
+			({{ qualCurrentMapIdx + 1 }}/{{ qualMappool.length }}) &mdash; Run
+			{{ qualCurrentRun }}/{{ qualTotalRuns }}
 		</span>
 		<span class="qa-quals-state">{{ qualStateLabel }}</span>
 	</div>
@@ -39,11 +40,25 @@
 		<button class="qa-winner-dismiss" @click="clearWinnerHint">×</button>
 	</div>
 	<div v-if="isVisible" id="osu-quick-actions">
-		<button class="qa-btn qa-settings" title="Settings" @click="openSettings">
+		<button
+			class="qa-btn qa-pool"
+			:disabled="!store.state.isConnected || !parsedMappool.length"
+			:title="parsedMappool.length ? 'Open mappool picker' : 'Import a mappool first'"
+			@click="openPoolPicker"
+		>
+			<MapPinned :size="12" />
+			<span class="qa-label">Pick Map</span>
+		</button>
+		<div class="qa-divider" />
+		<button
+			class="qa-btn qa-settings"
+			:disabled="!store.state.isConnected"
+			title="!mp settings"
+			@click="sendSettings"
+		>
 			<Settings :size="12" />
 			<span class="qa-label">Settings</span>
 		</button>
-		<div class="qa-divider" />
 		<button
 			class="qa-btn qa-timer"
 			:disabled="!store.state.isConnected"
@@ -56,7 +71,11 @@
 		<button
 			class="qa-btn qa-start"
 			:disabled="!store.state.isConnected"
-			:title="Number(store.state.settings.refStartTimer) > 0 ? `!mp start ${store.state.settings.refStartTimer}` : '!mp start'"
+			:title="
+				Number(store.state.settings.refStartTimer) > 0
+					? `!mp start ${store.state.settings.refStartTimer}`
+					: '!mp start'
+			"
 			@click="sendStart"
 		>
 			<Play :size="12" />
@@ -71,6 +90,10 @@
 			<Square :size="12" />
 			<span class="qa-label">Abort</span>
 		</button>
+		<button class="qa-btn qa-save-log" title="Save chatlog" @click="saveChatLog">
+			<Download :size="12" />
+			<span class="qa-label">Save Log</span>
+		</button>
 
 		<template v-if="store.state.settings.refQualEnabled">
 			<div class="qa-divider" />
@@ -78,7 +101,9 @@
 				v-if="qualState === 'idle' || qualState === 'done'"
 				class="qa-btn qa-quals-start"
 				:disabled="!store.state.isConnected || !parsedMappool.length"
-				:title="`Start Qualifiers (${parsedMappool.length} maps, ${qualTotalRuns} run${qualTotalRuns > 1 ? 's' : ''})`"
+				:title="`Start Qualifiers (${parsedMappool.length} maps, ${qualTotalRuns} run${
+					qualTotalRuns > 1 ? 's' : ''
+				})`"
 				@click="startQuals(channel.id)"
 			>
 				<Play :size="12" />
@@ -111,16 +136,56 @@
 			</button>
 		</template>
 	</div>
+
+	<div
+		v-if="isVisible && poolPickerOpen && parsedMappool.length"
+		class="qa-pool-modal-backdrop"
+		@click.self="closePoolPicker"
+	>
+		<div class="qa-pool-modal" role="dialog" aria-modal="true" aria-label="Mappool picker">
+			<div class="qa-pool-modal-head">
+				<span class="qa-pool-title">Pick Map</span>
+				<button
+					type="button"
+					class="qa-pool-close"
+					aria-label="Close"
+					@click="closePoolPicker"
+				>
+					x
+				</button>
+			</div>
+			<div class="qa-pool-groups">
+				<section v-for="group in groupedMappool" :key="group.name" class="qa-pool-group">
+					<div class="qa-pool-group-title">{{ group.name }}</div>
+					<div class="qa-pool-grid">
+						<button
+							v-for="map in group.maps"
+							:key="`${map.label}-${map.id}`"
+							type="button"
+							class="qa-pool-map"
+							:title="getMapPickTitle(map)"
+							@click="pickMap(map)"
+						>
+							<span class="qa-pool-map-label">{{ map.label }}</span>
+							<span class="qa-pool-map-id">{{ map.id }}</span>
+							<span class="qa-pool-map-mod">{{ getMapModLabel(map) }}</span>
+						</button>
+					</div>
+				</section>
+			</div>
+		</div>
+	</div>
 </template>
 
 <script lang="ts">
-import {defineComponent, PropType, computed} from "vue";
-import {useRouter} from "vue-router";
+import {defineComponent, PropType, computed, ref} from "vue";
 import {useStore} from "../js/store";
 import socket from "../js/socket";
 import type {ClientNetwork, ClientChan} from "../js/types";
 import {ChanType} from "../../shared/types/chan";
 import {customButtons, type QuickButton} from "../js/helpers/quickButtons";
+import {getLucideIcon} from "../js/helpers/lucideIcons";
+import {requestChatLog} from "../js/helpers/chatLog";
 import {
 	winnerHint,
 	winnerHintError,
@@ -134,29 +199,20 @@ import {
 	startQuals,
 	abortQuals,
 	resumeAfterEmergency,
-	parseMappool,
+	type QualMap,
 } from "../js/helpers/refHelper";
-import * as LucideIcons from "lucide-vue-next";
-import {Settings, Clock, Play, Square, Zap} from "lucide-vue-next";
-
-function resolveIcon(name?: string) {
-	if (name && Object.prototype.hasOwnProperty.call(LucideIcons, name)) {
-		return (LucideIcons as Record<string, unknown>)[name];
-	}
-
-	return Zap;
-}
+import {Settings, Clock, Play, Square, MapPinned, Download} from "lucide-vue-next";
 
 export default defineComponent({
 	name: "OsuQuickActions",
-	components: {Settings, Clock, Play, Square},
+	components: {Settings, Clock, Play, Square, MapPinned, Download},
 	props: {
 		network: {type: Object as PropType<ClientNetwork>, required: true},
 		channel: {type: Object as PropType<ClientChan>, required: true},
 	},
 	setup(props) {
 		const store = useStore();
-		const router = useRouter();
+		const poolPickerOpen = ref(false);
 
 		const isVisible = computed(() => /^#mp_/i.test(props.channel.name));
 
@@ -164,9 +220,19 @@ export default defineComponent({
 			socket.emit("input", {target: props.channel.id, text});
 		};
 
-		const openSettings = () => {
-			void router.push("/settings/quick-buttons");
+		const openPoolPicker = () => {
+			if (!store.state.isConnected || !parsedMappool.value.length) {
+				return;
+			}
+
+			poolPickerOpen.value = true;
 		};
+
+		const closePoolPicker = () => {
+			poolPickerOpen.value = false;
+		};
+
+		const sendSettings = () => send("!mp settings");
 
 		const sendTimer = () => {
 			const t = Number(store.state.settings.refTimerDefault) || 120;
@@ -178,10 +244,35 @@ export default defineComponent({
 		};
 		const sendAbort = () => send("!mp abort");
 
+		const saveChatLog = () => requestChatLog(props.channel.id);
+
 		const runCustom = (btn: QuickButton) => {
 			for (const cmd of btn.commands) {
 				if (cmd.trim()) send(cmd.trim());
 			}
+		};
+
+		const getMapPickCommands = (map: QualMap) => {
+			const mod = String(map.mod ?? "").trim();
+			const timer = Number(store.state.settings.refTimerDefault) || 120;
+
+			return [
+				`!mp map ${String(map.id).trim()}`,
+				mod ? `!mp mods ${mod}` : "!mp mods",
+				`!mp timer ${timer}`,
+			];
+		};
+
+		const getMapPickTitle = (map: QualMap) => getMapPickCommands(map).join("\n");
+
+		const getMapModLabel = (map: QualMap) => String(map.mod ?? "").trim() || "No mod";
+
+		const pickMap = (map: QualMap) => {
+			for (const cmd of getMapPickCommands(map)) {
+				send(cmd);
+			}
+
+			closePoolPicker();
 		};
 
 		const qualsRunning = computed(
@@ -195,12 +286,42 @@ export default defineComponent({
 
 		const qualTotalRuns = computed(() => Number(store.state.settings.refQualTotalRuns) || 1);
 
-		const parsedMappool = computed(() => {
+		const parsedMappool = computed<QualMap[]>(() => {
 			try {
 				const stored = JSON.parse(String(store.state.settings.refQualMappoolParsed ?? ""));
-				if (Array.isArray(stored) && stored.length) return stored;
-			} catch {}
-			return [];
+
+				if (!Array.isArray(stored)) {
+					return [];
+				}
+
+				return stored.filter(
+					(map): map is QualMap =>
+						typeof map?.label === "string" &&
+						typeof map?.id === "string" &&
+						typeof map?.mod === "string"
+				);
+			} catch {
+				return [];
+			}
+		});
+
+		const groupedMappool = computed(() => {
+			const groups: {name: string; maps: QualMap[]}[] = [];
+			const groupIndex = new Map<string, number>();
+
+			for (const map of parsedMappool.value) {
+				const name = map.label.trim().slice(0, 2).toUpperCase() || "??";
+				const existing = groupIndex.get(name);
+
+				if (existing === undefined) {
+					groupIndex.set(name, groups.length);
+					groups.push({name, maps: [map]});
+				} else {
+					groups[existing].maps.push(map);
+				}
+			}
+
+			return groups;
 		});
 
 		const qualStateLabel = computed(() => {
@@ -223,6 +344,7 @@ export default defineComponent({
 		return {
 			store,
 			isVisible,
+			poolPickerOpen,
 			customButtons,
 			winnerHint,
 			winnerHintError,
@@ -237,16 +359,23 @@ export default defineComponent({
 			abortQuals,
 			resumeAfterEmergency,
 			parsedMappool,
+			groupedMappool,
 			qualsRunning,
 			currentQualMap,
 			qualTotalRuns,
 			qualStateLabel,
-			openSettings,
+			openPoolPicker,
+			closePoolPicker,
+			pickMap,
+			getMapPickTitle,
+			getMapModLabel,
+			sendSettings,
 			sendTimer,
 			sendStart,
 			sendAbort,
+			saveChatLog,
 			runCustom,
-			resolveIcon,
+			resolveIcon: getLucideIcon,
 		};
 	},
 });
@@ -325,6 +454,142 @@ export default defineComponent({
 	background: #28333d;
 }
 
+.qa-pool-modal-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 30;
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+	padding: 24px 12px 48px;
+	background: rgba(0, 0, 0, 0.32);
+}
+
+.qa-pool-modal {
+	width: min(680px, calc(100vw - 24px));
+	max-height: min(520px, 60vh);
+	overflow: hidden;
+	background: var(--window-bg-color);
+	border: 1px solid #2a2a40;
+	border-radius: 4px;
+	box-shadow: 0 18px 50px rgba(0, 0, 0, 0.42);
+}
+
+.qa-pool-modal-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 10px 12px;
+	border-bottom: 1px solid #2a2a40;
+}
+
+.qa-pool-title {
+	color: #ff66aa;
+	font-family: monospace;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.qa-pool-close {
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: 3px;
+	color: #9999bb;
+	cursor: pointer;
+	font-family: monospace;
+	font-size: 12px;
+	line-height: 1;
+}
+
+.qa-pool-close:hover {
+	color: #ff66aa;
+	background: rgba(255, 102, 170, 0.09);
+	border-color: rgba(255, 102, 170, 0.2);
+}
+
+.qa-pool-groups {
+	max-height: calc(min(520px, 60vh) - 45px);
+	overflow: auto;
+	padding: 10px;
+}
+
+.qa-pool-group + .qa-pool-group {
+	margin-top: 12px;
+}
+
+.qa-pool-group-title {
+	margin: 0 0 6px;
+	color: #ff66aa;
+	font-family: monospace;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.qa-pool-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+	gap: 6px;
+}
+
+.qa-pool-map {
+	display: grid;
+	gap: 3px;
+	min-width: 0;
+	padding: 8px 9px;
+	background: rgba(255, 255, 255, 0.02);
+	border: 1px solid #2a2a40;
+	border-radius: 4px;
+	color: #9999bb;
+	cursor: pointer;
+	font-family: monospace;
+	text-align: left;
+}
+
+.qa-pool-map:hover {
+	color: #ff66aa;
+	background: rgba(255, 102, 170, 0.08);
+	border-color: rgba(255, 102, 170, 0.24);
+}
+
+.qa-pool-map-label {
+	overflow: hidden;
+	color: inherit;
+	font-size: 13px;
+	font-weight: 700;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.qa-pool-map-id,
+.qa-pool-map-mod {
+	overflow: hidden;
+	color: #777799;
+	font-size: 10px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.qa-pool-map-mod {
+	color: #66ddaa;
+}
+
+.morning .qa-pool-modal {
+	border-color: #28333d;
+}
+
+.morning .qa-pool-modal-head,
+.morning .qa-pool-map {
+	border-color: #28333d;
+}
+
 .qa-winner-bar {
 	display: flex;
 	align-items: center;
@@ -390,8 +655,12 @@ export default defineComponent({
 }
 
 @keyframes qa-emergency-pulse {
-	from { background: rgba(255, 40, 70, 0.12); }
-	to   { background: rgba(255, 40, 70, 0.28); }
+	from {
+		background: rgba(255, 40, 70, 0.12);
+	}
+	to {
+		background: rgba(255, 40, 70, 0.28);
+	}
 }
 
 .qa-emergency-icon {

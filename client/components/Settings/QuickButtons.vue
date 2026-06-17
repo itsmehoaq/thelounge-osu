@@ -40,8 +40,8 @@
 		</div>
 
 		<p class="qb-hint">
-			Built-in buttons (Settings, Timer, Start, Abort) always appear. Add custom buttons
-			below to send one or more commands in sequence.
+			Built-in buttons (Settings, Timer, Start, Abort) always appear. Add custom buttons below
+			to send one or more commands in sequence.
 		</p>
 
 		<div v-if="customButtons.length > 0" class="qb-list">
@@ -54,12 +54,10 @@
 					<span class="qb-item-cmds">{{ btn.commands.join(" → ") }}</span>
 				</div>
 				<div class="qb-item-actions">
-					<button type="button" class="btn btn-small" @click="startEdit(btn)">Edit</button>
-					<button
-						type="button"
-						class="btn btn-small btn-danger"
-						@click="remove(btn.id)"
-					>
+					<button type="button" class="btn btn-small" @click="startEdit(btn)">
+						Edit
+					</button>
+					<button type="button" class="btn btn-small btn-danger" @click="remove(btn.id)">
 						Remove
 					</button>
 				</div>
@@ -109,10 +107,15 @@
 						placeholder="Zap"
 						@keydown.stop
 					/>
-					<span class="qb-icon-preview" :title="iconValid ? formIcon : 'Unknown icon — using Zap'">
+					<span
+						class="qb-icon-preview"
+						:title="iconValid ? formIcon : 'Unknown icon — using Zap'"
+					>
 						<component :is="resolveIcon(formIcon)" :size="16" />
 					</span>
-					<span v-if="formIcon && !iconValid" class="qb-icon-warn">unknown, using Zap</span>
+					<span v-if="formIcon && !iconValid" class="qb-icon-warn"
+						>unknown, using Zap</span
+					>
 				</div>
 			</div>
 
@@ -142,9 +145,8 @@
 
 <script lang="ts">
 import {defineComponent, ref, computed} from "vue";
-import * as LucideIcons from "lucide-vue-next";
-import {Zap} from "lucide-vue-next";
 import {useStore} from "../../js/store";
+import {getLucideIcon, hasLucideIcon} from "../../js/helpers/lucideIcons";
 import {
 	customButtons,
 	addButton,
@@ -152,14 +154,6 @@ import {
 	removeButton,
 	type QuickButton,
 } from "../../js/helpers/quickButtons";
-
-function resolveIcon(name?: string) {
-	if (name && Object.prototype.hasOwnProperty.call(LucideIcons, name)) {
-		return (LucideIcons as Record<string, unknown>)[name];
-	}
-
-	return Zap;
-}
 
 export default defineComponent({
 	name: "QuickButtonsSettings",
@@ -172,11 +166,7 @@ export default defineComponent({
 		const formIcon = ref("");
 		const formDanger = ref(false);
 
-		const iconValid = computed(
-			() =>
-				!formIcon.value ||
-				Object.prototype.hasOwnProperty.call(LucideIcons, formIcon.value)
-		);
+		const iconValid = computed(() => hasLucideIcon(formIcon.value));
 
 		const resetForm = () => {
 			formLabel.value = "";
@@ -248,7 +238,7 @@ export default defineComponent({
 			closeForm,
 			save,
 			remove,
-			resolveIcon,
+			resolveIcon: getLucideIcon,
 		};
 	},
 });

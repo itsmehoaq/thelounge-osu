@@ -20,6 +20,7 @@ import "./sign_out";
 import "./sessions_list";
 import "./configuration";
 import "./changelog";
+import "./chatlog";
 import "./setting";
 import "./history_clear";
 import "./mentions";

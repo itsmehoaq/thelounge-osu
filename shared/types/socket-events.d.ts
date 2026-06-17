@@ -78,6 +78,7 @@ interface ServerToClientEvents {
 	users: EventHandler<{chan: number}>;
 
 	more: EventHandler<{chan: number; messages: SharedMsg[]; totalMessages: number}>;
+	"chatlog:data": EventHandler<{target: number; channelName: string; messages: SharedMsg[]}>;
 
 	"msg:preview": EventHandler<{id: number; chan: number; preview: LinkPreview}>;
 	"msg:special": EventHandler<{chan: number; data?: Record<string, any>}>;
@@ -163,6 +164,7 @@ interface ClientToServerEvents {
 	"mentions:get": NoPayloadEventHandler;
 
 	more: EventHandler<{target: number; lastId: number; condensed: boolean}>;
+	"chatlog:get": EventHandler<{target: number}>;
 
 	"msg:preview:toggle": EventHandler<{
 		target: number;
