@@ -14,7 +14,6 @@
 		</div>
 
 		<fieldset :disabled="!store.state.settings.refHelperEnabled" class="rh-fieldset">
-
 			<div class="rh-block">
 				<p class="rh-section-label">Match Setup</p>
 
@@ -73,11 +72,17 @@
 
 				<div class="opt rh-inline-toggle">
 					<label>
-						<input :checked="store.state.settings.refShowWinnerHint" type="checkbox" name="refShowWinnerHint" />
+						<input
+							:checked="store.state.settings.refShowWinnerHint"
+							type="checkbox"
+							name="refShowWinnerHint"
+						/>
 						Show winner hint after each map
 					</label>
 				</div>
-				<p class="osu-hint rh-hint-note">Requires osu! API credentials (set in osu! IRC settings).</p>
+				<p class="osu-hint rh-hint-note">
+					Requires osu! API credentials (set in osu! IRC settings).
+				</p>
 			</div>
 
 			<div class="rh-block">
@@ -99,19 +104,8 @@
 				</p>
 
 				<template v-if="store.state.settings.refQualEnabled">
-					<div class="opt rh-inline-toggle">
-						<label>
-							<input
-								:checked="store.state.settings.refQualNfEnabled"
-								type="checkbox"
-								name="refQualNfEnabled"
-							/>
-							NoFail (NF) by default
-						</label>
-					</div>
 					<p class="osu-hint rh-hint-note">
-						Appends <code class="rh-inline-code">nf</code> to all mod commands except Freemod
-						(e.g. <code class="rh-inline-code">!mp mods nf</code>, <code class="rh-inline-code">!mp mods hd nf</code>).
+						Map and mod commands use the saved rows from the Mappool section below.
 					</p>
 
 					<div class="osu-field">
@@ -139,48 +133,12 @@
 					</div>
 
 					<div class="osu-field">
-						<label for="rh-qual-mappool" class="osu-label">Mappool</label>
+						<label for="rh-qual-emergency" class="osu-label"
+							>Emergency stop keyword</label
+						>
 						<p class="osu-hint">
-							Paste from spreadsheet (tab-separated):
-							<code class="rh-inline-code">NM1[tab]beatmapID</code> one per line.
-							Mod is auto-set from the label prefix (NM, HD, HR, DT, FM, TB…).
+							Any player typing this pauses automation and triggers an alert.
 						</p>
-						<textarea
-							id="rh-qual-mappool"
-							:value="store.state.settings.refQualMappool"
-							name="refQualMappool"
-							class="input rh-mappool-textarea"
-							placeholder="NM1&#9;1234567&#10;NM2&#9;2345678&#10;HD1&#9;3456789"
-							spellcheck="false"
-							@keydown.stop
-						/>
-						<button type="button" class="btn btn-small rh-import-btn" @click="importMappool">
-							Import
-						</button>
-
-						<div v-if="parsedMaps.length" class="rh-map-grid">
-							<div class="rh-map-grid-head">
-								<span>Label</span>
-								<span>Map ID</span>
-								<span>Mod command</span>
-							</div>
-							<div v-for="(m, i) in parsedMaps" :key="i" class="rh-map-row">
-								<span class="rh-map-label">{{ m.label }}</span>
-								<span class="rh-map-id">{{ m.id }}</span>
-								<input
-									:value="m.mod"
-									type="text"
-									class="input rh-map-mod-input"
-									@keydown.stop
-									@change="onModChange(i, $event)"
-								/>
-							</div>
-						</div>
-					</div>
-
-					<div class="osu-field">
-						<label for="rh-qual-emergency" class="osu-label">Emergency stop keyword</label>
-						<p class="osu-hint">Any player typing this pauses automation and triggers an alert.</p>
 						<input
 							id="rh-qual-emergency"
 							:value="store.state.settings.refQualEmergencyWord"
@@ -194,6 +152,53 @@
 				</template>
 			</div>
 
+			<div class="rh-block">
+				<p class="rh-section-label">Mappool</p>
+
+				<div class="osu-field">
+					<label for="rh-qual-mappool" class="osu-label">Imported maps</label>
+					<p class="osu-hint">
+						Paste from spreadsheet (tab-separated):
+						<code class="rh-inline-code">NM1[tab]beatmapID</code> one per line. Mod is
+						auto-set from the label prefix on import, then can be edited below.
+					</p>
+					<textarea
+						id="rh-qual-mappool"
+						:value="store.state.settings.refQualMappool"
+						name="refQualMappool"
+						class="input rh-mappool-textarea"
+						placeholder="NM1&#9;1234567&#10;NM2&#9;2345678&#10;HD1&#9;3456789"
+						spellcheck="false"
+						@keydown.stop
+					/>
+					<button
+						type="button"
+						class="btn btn-small rh-import-btn"
+						@click="importMappool"
+					>
+						Import
+					</button>
+
+					<div v-if="parsedMaps.length" class="rh-map-grid">
+						<div class="rh-map-grid-head">
+							<span>Label</span>
+							<span>Map ID</span>
+							<span>Mod command</span>
+						</div>
+						<div v-for="(m, i) in parsedMaps" :key="i" class="rh-map-row">
+							<span class="rh-map-label">{{ m.label }}</span>
+							<span class="rh-map-id">{{ m.id }}</span>
+							<input
+								:value="m.mod"
+								type="text"
+								class="input rh-map-mod-input"
+								@keydown.stop
+								@change="onModChange(i, $event)"
+							/>
+						</div>
+					</div>
+				</div>
+			</div>
 		</fieldset>
 	</div>
 </template>

@@ -17,7 +17,14 @@ export function clearWinnerHint() {
 
 // ─── Qualifiers automation ───────────────────────────────────────────────────
 
-type QualState = "idle" | "setting_map" | "verifying" | "waiting_ready" | "running" | "done" | "emergency";
+type QualState =
+	| "idle"
+	| "setting_map"
+	| "verifying"
+	| "waiting_ready"
+	| "running"
+	| "done"
+	| "emergency";
 
 export interface QualMap {
 	label: string;
@@ -33,8 +40,6 @@ export const qualEmergencyWho = ref<string | null>(null);
 export const qualEmergencyMsg = ref<string | null>(null);
 
 let qualsChannelId: number | null = null;
-let awaitingSettings = false;
-let expectedMapId: string | null = null;
 
 const MOD_MAP: Record<string, string> = {
 	NM: "",
@@ -77,8 +82,6 @@ export function startQuals(channelId: number) {
 	qualCurrentRun.value = 1;
 	qualEmergencyWho.value = null;
 	qualEmergencyMsg.value = null;
-	awaitingSettings = false;
-	expectedMapId = null;
 
 	const emergencyWord = String(store.state.settings.refQualEmergencyWord ?? "");
 	sendQualCmd("Notice: Automation mode is active.");
@@ -92,8 +95,6 @@ export function startQuals(channelId: number) {
 export function abortQuals() {
 	qualState.value = "idle";
 	qualsChannelId = null;
-	awaitingSettings = false;
-	expectedMapId = null;
 	qualEmergencyWho.value = null;
 	qualEmergencyMsg.value = null;
 }
@@ -110,21 +111,25 @@ function setNextMap() {
 		qualState.value = "done";
 		return;
 	}
-	expectedMapId = map.id;
 
-	let mod = map.mod;
-	if (store.state.settings.refQualNfEnabled && mod !== "freemod") {
-		mod = mod ? `${mod} nf` : "nf";
-	}
+	const mod = String(map.mod ?? "").trim();
 
 	sendQualCmd(`!mp map ${map.id}`);
 	sendQualCmd(`!mp mods ${mod}`.trimEnd());
-	qualState.value = "setting_map";
+	sendQualCmd(`!mp timer ${Number(store.state.settings.refTimerDefault) || 120}`);
+	qualState.value = "waiting_ready";
 }
 
 function sendQualCmd(cmd: string) {
 	if (qualsChannelId === null) return;
 	socket.emit("input", {target: qualsChannelId, text: cmd});
+}
+
+function sendQualStart() {
+	const startTimer = Number(store.state.settings.refStartTimer);
+
+	qualState.value = "running";
+	sendQualCmd(startTimer > 0 ? `!mp start ${startTimer}` : "!mp start");
 }
 
 function playEmergencyBeeps() {
@@ -157,39 +162,14 @@ function triggerEmergency(nick: string, text: string) {
 }
 
 function processQualsMessage(text: string) {
-	// Accumulate !mp settings response — look for Beatmap line
-	if (awaitingSettings) {
-		const m = text.match(/osu\.ppy\.sh\/(?:b|beatmaps)\/(\d+)|beatmapsets\/\d+#\w+\/(\d+)/);
-		if (m && /^Beatmap:/i.test(text)) {
-			const foundId = m[1] ?? m[2];
-			awaitingSettings = false;
-			if (foundId === expectedMapId) {
-				qualState.value = "waiting_ready";
-				sendQualCmd("!mp timer 120");
-			} else {
-				// Map not set yet — retry
-				setNextMap();
-			}
-		}
-		return;
-	}
-
 	switch (qualState.value) {
-		case "setting_map":
-			if (/Beatmap changed to:/i.test(text)) {
-				qualState.value = "verifying";
-				sendQualCmd("!mp settings");
-				awaitingSettings = true;
-			}
-			break;
-
 		case "waiting_ready":
-			if (/All players are ready/i.test(text)) {
-				qualState.value = "running";
-				sendQualCmd("!mp start 10");
-			} else if (/Countdown (has ended|finished)/i.test(text)) {
-				qualState.value = "running";
-				sendQualCmd("!mp start 10");
+			if (
+				/All players are ready/i.test(text) ||
+				/Everyone is ready/i.test(text) ||
+				/Countdown (?:has )?(?:ended|finished)/i.test(text)
+			) {
+				sendQualStart();
 			}
 			break;
 
@@ -223,9 +203,7 @@ export function processBanchoMessage(nick: string, text: string) {
 	if (!store.state.settings.refHelperEnabled) return;
 
 	const qualsActive =
-		qualState.value !== "idle" &&
-		qualState.value !== "done" &&
-		qualState.value !== "emergency";
+		qualState.value !== "idle" && qualState.value !== "done" && qualState.value !== "emergency";
 
 	// Emergency word — any player, any message
 	if (qualsActive && nick !== "BanchoBot") {
@@ -355,14 +333,14 @@ function calculateWinner(
 		const winner = redWins ? "Red" : "Blue";
 		const diff = Math.abs(totals.red - totals.blue);
 		const diffStr =
-			winCondition === "accuracy"
-				? `${(diff * 100).toFixed(2)}%`
-				: diff.toLocaleString();
+			winCondition === "accuracy" ? `${(diff * 100).toFixed(2)}%` : diff.toLocaleString();
 		return `${winner} team wins  (+${diffStr})`;
 	}
 
 	// Head-to-head
-	const sorted = [...passed].sort((a, b) => getValue(b, winCondition) - getValue(a, winCondition));
+	const sorted = [...passed].sort(
+		(a, b) => getValue(b, winCondition) - getValue(a, winCondition)
+	);
 	const top = sorted[0];
 	const val = getValue(top, winCondition);
 	const name = getUserName(top.user_id as number, users);
