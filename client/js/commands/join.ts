@@ -1,7 +1,7 @@
 import socket from "../socket";
 import {store} from "../store";
 import {switchToChannel} from "../router";
-import {ChanType} from "../../../shared/types/chan";
+import {ChanState, ChanType} from "../../../shared/types/chan";
 
 export function input(args: string[]): boolean {
 	if (args.length > 0) {
@@ -23,7 +23,7 @@ export function input(args: string[]): boolean {
 
 			const chan = store.getters.findChannelOnCurrentNetwork(channels);
 
-			if (chan) {
+			if (chan && chan.state !== ChanState.PARTED) {
 				switchToChannel(chan);
 			} else {
 				if (store.state.activeChannel) {

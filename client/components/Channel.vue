@@ -12,9 +12,9 @@
 			<span
 				v-if="channel.state === 0"
 				class="parted-channel-tooltip tooltipped tooltipped-w"
-				aria-label="Not currently joined"
+				aria-label="Rejoin"
 			>
-				<span class="parted-channel-icon" />
+				<button class="parted-channel-icon" aria-label="Rejoin" @click.stop="rejoin" />
 			</span>
 			<span class="close-tooltip tooltipped tooltipped-w" data-tooltip="Leave">
 				<button class="close" aria-label="Leave" @click.stop="close" />
@@ -32,6 +32,7 @@
 import {PropType, defineComponent, computed} from "vue";
 import roundBadgeNumber from "../js/helpers/roundBadgeNumber";
 import useCloseChannel from "../js/hooks/use-close-channel";
+import socket from "../js/socket";
 import {ClientChan, ClientNetwork} from "../js/types";
 import ChannelWrapper from "./ChannelWrapper.vue";
 
@@ -55,10 +56,17 @@ export default defineComponent({
 	setup(props) {
 		const unreadCount = computed(() => roundBadgeNumber(props.channel.unread));
 		const close = useCloseChannel(props.channel);
+		const rejoin = () => {
+			socket.emit("input", {
+				target: props.channel.id,
+				text: `/join ${props.channel.name}`,
+			});
+		};
 
 		return {
 			unreadCount,
 			close,
+			rejoin,
 		};
 	},
 });

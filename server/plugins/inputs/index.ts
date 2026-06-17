@@ -32,18 +32,7 @@ type ExternalPluginCommand = {
 
 const clientSideCommands = ["/collapse", "/expand", "/search"];
 
-const passThroughCommands = [
-	"/as",
-	"/bs",
-	"/cs",
-	"/ho",
-	"/hs",
-	"/join",
-	"/ms",
-	"/ns",
-	"/os",
-	"/rs",
-];
+const passThroughCommands = ["/as", "/bs", "/cs", "/ho", "/hs", "/ms", "/ns", "/os", "/rs"];
 
 const userInputs = new Map<string, Plugin>();
 const builtInInputs = [
@@ -56,6 +45,7 @@ const builtInInputs = [
 	"ignore",
 	"ignorelist",
 	"invite",
+	"join",
 	"kick",
 	"kill",
 	"list",

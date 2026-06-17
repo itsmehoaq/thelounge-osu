@@ -4,7 +4,7 @@ import type {ClientChan, ClientNetwork, ClientUser} from "../types";
 import {switchToChannel} from "../router";
 import {TypedStore} from "../store";
 import useCloseChannel from "../hooks/use-close-channel";
-import {ChanType} from "../../../shared/types/chan";
+import {ChanState, ChanType} from "../../../shared/types/chan";
 
 type BaseContextMenuItem = {
 	label: string;
@@ -123,6 +123,20 @@ export function generateChannelContextMenu(
 
 	// Add menu items for channels
 	if (channel.type === ChanType.CHANNEL) {
+		if (channel.state === ChanState.PARTED) {
+			items.push({
+				label: "Rejoin",
+				type: "item",
+				class: "join",
+				action() {
+					socket.emit("input", {
+						target: channel.id,
+						text: "/join " + channel.name,
+					});
+				},
+			});
+		}
+
 		items.push({
 			label: "Edit topic",
 			type: "item",
