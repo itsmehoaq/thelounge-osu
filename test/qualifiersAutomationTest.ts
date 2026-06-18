@@ -1,5 +1,9 @@
 import {expect} from "chai";
-import {getQualsMessageEvent, isBanchoBotNick} from "../client/js/helpers/qualifiers";
+import {
+	getQualsMessageEvent,
+	isBanchoBotNick,
+	shouldTriggerQualsEmergency,
+} from "../client/js/helpers/qualifiers";
 
 describe("qualifiers automation message detection", function () {
 	it("detects the ready message emitted by BanchoBot", function () {
@@ -23,5 +27,20 @@ describe("qualifiers automation message detection", function () {
 		expect(isBanchoBotNick(" BanchoBot ")).to.equal(true);
 		expect(isBanchoBotNick("banchobot")).to.equal(true);
 		expect(isBanchoBotNick("Player")).to.equal(false);
+	});
+
+	it("ignores the emergency keyword when sent by the referee", function () {
+		expect(
+			shouldTriggerQualsEmergency(
+				'Send "!panic" in chat to stop and wait for ref',
+				"!panic",
+				true,
+				false
+			)
+		).to.equal(false);
+	});
+
+	it("allows another player to trigger the emergency keyword", function () {
+		expect(shouldTriggerQualsEmergency("please !PANIC", "!panic", false, false)).to.equal(true);
 	});
 });

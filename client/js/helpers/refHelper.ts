@@ -3,7 +3,7 @@ import {store} from "../store";
 import {getOsuToken, fetchOsuMatch} from "./osuApi";
 import socket from "../socket";
 import {cleanIrcMessage} from "../../../shared/irc";
-import {getQualsMessageEvent, isBanchoBotNick} from "./qualifiers";
+import {getQualsMessageEvent, isBanchoBotNick, shouldTriggerQualsEmergency} from "./qualifiers";
 
 // ─── Winner hint ────────────────────────────────────────────────────────────
 
@@ -201,7 +201,12 @@ function advanceQuals() {
 
 // ─── BanchoBot message router ─────────────────────────────────────────────────
 
-export function processBanchoMessage(nick: string, text: string, channelId?: number) {
+export function processBanchoMessage(
+	nick: string,
+	text: string,
+	channelId?: number,
+	isSelf = false
+) {
 	const qualsActive =
 		qualState.value !== "idle" && qualState.value !== "done" && qualState.value !== "emergency";
 	const isBanchoBot = isBanchoBotNick(nick);
@@ -212,7 +217,7 @@ export function processBanchoMessage(nick: string, text: string, channelId?: num
 	if (qualsActive && isQualsChannel && !isBanchoBot) {
 		const eWord = String(store.state.settings.refQualEmergencyWord ?? "").trim();
 
-		if (eWord && normalizedText.toLowerCase().includes(eWord.toLowerCase())) {
+		if (shouldTriggerQualsEmergency(normalizedText, eWord, isSelf, isBanchoBot)) {
 			triggerEmergency(nick, normalizedText);
 		}
 

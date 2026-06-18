@@ -71,7 +71,12 @@ socket.on("msg", function (data) {
 	channel.messages.push(data.msg);
 
 	if (data.msg.from?.nick && data.msg.text) {
-		processBanchoMessage(data.msg.from.nick, data.msg.text, sourceChannelId);
+		processBanchoMessage(
+			data.msg.from.nick,
+			data.msg.text,
+			sourceChannelId,
+			Boolean(data.msg.self)
+		);
 	}
 
 	if (data.msg.self) {

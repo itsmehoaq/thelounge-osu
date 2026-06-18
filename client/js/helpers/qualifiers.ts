@@ -6,6 +6,21 @@ export function isBanchoBotNick(nick: string): boolean {
 	return nick.trim().toLowerCase() === "banchobot";
 }
 
+export function shouldTriggerQualsEmergency(
+	text: string,
+	emergencyWord: string,
+	isSelf: boolean,
+	isBanchoBot: boolean
+): boolean {
+	const normalizedEmergencyWord = emergencyWord.trim().toLowerCase();
+
+	if (isSelf || isBanchoBot || !normalizedEmergencyWord) {
+		return false;
+	}
+
+	return cleanIrcMessage(text).toLowerCase().includes(normalizedEmergencyWord);
+}
+
 export function getQualsMessageEvent(text: string): QualsMessageEvent | null {
 	const normalizedText = cleanIrcMessage(text).replace(/\s+/g, " ");
 
