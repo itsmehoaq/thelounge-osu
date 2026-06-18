@@ -383,10 +383,10 @@
 			<h2>Autocompletion</h2>
 
 			<p>
-				To auto-complete nicknames, channels, commands, and emoji, type one of the
-				characters below to open a suggestion list. Use the <kbd>↑</kbd> and
-				<kbd>↓</kbd> keys to highlight an item, and insert it by pressing <kbd>Tab</kbd> or
-				<kbd>Enter</kbd> (or by clicking the desired item).
+				To auto-complete nicknames, channels, and commands, type one of the characters below
+				to open a suggestion list. Use the <kbd>↑</kbd> and <kbd>↓</kbd> keys to highlight
+				an item, and insert it by pressing <kbd>Tab</kbd> or <kbd>Enter</kbd> (or by
+				clicking the desired item).
 			</p>
 			<p>Autocompletion can be disabled in settings.</p>
 
@@ -414,18 +414,6 @@
 				</div>
 				<div class="description">
 					<p>Commands (see list of commands below)</p>
-				</div>
-			</div>
-
-			<div class="help-item">
-				<div class="subject">
-					<code>:</code>
-				</div>
-				<div class="description">
-					<p>
-						Emoji (note: requires two search characters, to avoid conflicting with
-						common emoticons like <code>:)</code>)
-					</p>
 				</div>
 			</div>
 

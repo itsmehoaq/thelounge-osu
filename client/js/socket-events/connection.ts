@@ -1,11 +1,12 @@
 import {store} from "../store";
-import socket from "../socket";
+import socket, {publicSessionId} from "../socket";
 
 socket.on("disconnect", handleDisconnect);
 socket.on("connect_error", handleDisconnect);
 socket.on("error", handleDisconnect);
 
 socket.io.on("reconnect_attempt", function (attempt) {
+	updatePublicSessionAuth();
 	store.commit("currentUserVisibleError", `Reconnecting… (attempt ${attempt})`);
 	updateLoadingMessage();
 });
@@ -28,6 +29,7 @@ socket.on("connect", function () {
 function handleDisconnect(data) {
 	const message = String(data.message || data);
 
+	updatePublicSessionAuth();
 	store.commit("isConnected", false);
 
 	if (!socket.io.reconnection()) {
@@ -49,6 +51,31 @@ function handleDisconnect(data) {
 	if (socket.io.skipReconnect && message !== "io client disconnect") {
 		requestIdleCallback(() => socket.connect(), 2000);
 	}
+}
+
+function updatePublicSessionAuth() {
+	if (!publicSessionId) {
+		return;
+	}
+
+	let lastMessage = -1;
+
+	for (const network of store.state.networks) {
+		for (const channel of network.channels) {
+			const message = channel.messages[channel.messages.length - 1];
+
+			if (message && message.id > lastMessage) {
+				lastMessage = message.id;
+			}
+		}
+	}
+
+	socket.auth = {
+		publicSessionId,
+		lastMessage,
+		openChannel: store.state.activeChannel?.channel.id ?? null,
+		hasConfig: store.state.serverConfiguration !== null,
+	};
 }
 
 function requestIdleCallback(callback, timeout) {

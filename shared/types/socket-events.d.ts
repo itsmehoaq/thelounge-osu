@@ -114,6 +114,12 @@ interface ServerToClientEvents {
 
 type AuthPerformData =
 	| Record<string, never> // funny way of saying an empty object
+	| {
+			publicSessionId: string;
+			lastMessage?: number;
+			openChannel?: number | null;
+			hasConfig?: boolean;
+	  }
 	| {user: string; password: string}
 	| {
 			user: string;

@@ -65,8 +65,61 @@ export type Server = ioServer<
 
 // A random number that will force clients to reload the page if it differs
 const serverHash = Math.floor(Date.now() * Math.random());
+const publicSessionCloseDelay = 5000;
 
 let manager: ClientManager | null = null;
+
+type PublicSession = {
+	client: Client;
+	socketIds: Set<string>;
+	cleanupTimer: NodeJS.Timeout | null;
+};
+
+const publicSessions = new Map<string, PublicSession>();
+
+function getPublicSessionId(value: unknown): string | null {
+	if (typeof value !== "string" || !/^[a-zA-Z0-9-]{16,128}$/.test(value)) {
+		return null;
+	}
+
+	return value;
+}
+
+function cancelPublicSessionCleanup(session: PublicSession) {
+	if (session.cleanupTimer) {
+		clearTimeout(session.cleanupTimer);
+		session.cleanupTimer = null;
+	}
+}
+
+function destroyPublicSession(sessionId: string, force = false) {
+	const session = publicSessions.get(sessionId);
+
+	if (!session) {
+		return;
+	}
+
+	if (!force && session.socketIds.size > 0) {
+		cancelPublicSessionCleanup(session);
+		return;
+	}
+
+	cancelPublicSessionCleanup(session);
+	publicSessions.delete(sessionId);
+	session.client.manager.clients = _.without(session.client.manager.clients, session.client);
+	session.client.quit();
+}
+
+function schedulePublicSessionCleanup(sessionId: string, delay: number) {
+	const session = publicSessions.get(sessionId);
+
+	if (!session) {
+		return;
+	}
+
+	cancelPublicSessionCleanup(session);
+	session.cleanupTimer = setTimeout(() => destroyPublicSession(sessionId), delay);
+}
 
 export default async function (
 	options: ServerOptions = {
@@ -94,6 +147,19 @@ export default async function (
 		.disable("x-powered-by")
 		.use(allRequests)
 		.use(addSecurityHeaders)
+		.post(
+			"/public-session/close",
+			express.text({type: "text/plain", limit: "256b"}),
+			(req, res) => {
+				const sessionId = getPublicSessionId(req.body);
+
+				if (sessionId) {
+					schedulePublicSessionCleanup(sessionId, publicSessionCloseDelay);
+				}
+
+				res.sendStatus(204);
+			}
+		)
 		.get("/", indexRequest)
 		.get("/service-worker.js", forceNoCacheRequest)
 		.get("/js/bundle.js.map", forceNoCacheRequest)
@@ -236,7 +302,7 @@ export default async function (
 			socket.on("error", (err) => log.error(`io socket error: ${err}`));
 
 			if (Config.values.public) {
-				performAuthentication.call(socket, {});
+				performAuthentication.call(socket, socket.handshake.auth as AuthPerformData);
 			} else {
 				socket.on("auth:perform", performAuthentication);
 				socket.emit("auth:start", serverHash);
@@ -1048,18 +1114,44 @@ function performAuthentication(this: Socket, data: AuthPerformData) {
 	};
 
 	if (Config.values.public) {
-		client = new Client(manager!);
-		client.connect();
-		manager!.clients.push(client);
+		const requestedSessionId = getPublicSessionId(
+			"publicSessionId" in data ? data.publicSessionId : null
+		);
+		const sessionId = requestedSessionId ?? socket.id;
+		let publicSession = publicSessions.get(sessionId);
 
-		const cb_client = client; // ensure TS can see we never have a nil client
-		socket.on("disconnect", function () {
-			manager!.clients = _.without(manager!.clients, cb_client);
-			cb_client.quit();
+		if (publicSession) {
+			cancelPublicSessionCleanup(publicSession);
+			client = publicSession.client;
+		} else {
+			client = new Client(manager!);
+			client.connect();
+			manager!.clients.push(client);
+			publicSession = {
+				client,
+				socketIds: new Set(),
+				cleanupTimer: null,
+			};
+			publicSessions.set(sessionId, publicSession);
+		}
+
+		publicSession.socketIds.add(socket.id);
+		const activePublicSession = publicSession;
+
+		socket.on("disconnect", () => {
+			activePublicSession.socketIds.delete(socket.id);
 		});
+
+		if (!requestedSessionId) {
+			socket.on("disconnect", () => destroyPublicSession(sessionId, true));
+		}
 
 		initClient();
 
+		return;
+	}
+
+	if ("publicSessionId" in data) {
 		return;
 	}
 

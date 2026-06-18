@@ -14,11 +14,18 @@
 		<div class="lobby-wrap">
 			<span :title="channel.name" class="name">{{ channel.name }}</span>
 			<span
-				v-if="!network.status.connected"
-				class="not-connected-tooltip tooltipped tooltipped-w"
-				aria-label="Disconnected"
+				v-if="!store.state.isConnected || !network.status.connected"
+				:aria-label="reconnectLabel"
+				class="reconnect-network-tooltip tooltipped tooltipped-w tooltipped-no-touch"
 			>
-				<span class="not-connected-icon" />
+				<button
+					type="button"
+					class="reconnect-network"
+					:aria-label="reconnectLabel"
+					@click.stop="reconnect"
+				>
+					<RotateCcw :size="13" />
+				</button>
 			</span>
 			<span v-if="channel.unread" :class="{highlight: channel.highlight}" class="badge">{{
 				unreadCount
@@ -42,7 +49,10 @@
 import {computed, defineComponent, PropType} from "vue";
 import collapseNetwork from "../js/helpers/collapseNetwork";
 import roundBadgeNumber from "../js/helpers/roundBadgeNumber";
+import socket from "../js/socket";
+import {useStore} from "../js/store";
 import ChannelWrapper from "./ChannelWrapper.vue";
+import {RotateCcw} from "lucide-vue-next";
 
 import type {ClientChan, ClientNetwork} from "../js/types";
 
@@ -50,6 +60,7 @@ export default defineComponent({
 	name: "Channel",
 	components: {
 		ChannelWrapper,
+		RotateCcw,
 	},
 	props: {
 		network: {
@@ -62,6 +73,7 @@ export default defineComponent({
 	},
 	emits: ["toggle-join-channel"],
 	setup(props) {
+		const store = useStore();
 		const channel = computed(() => {
 			return props.network.channels[0];
 		});
@@ -74,6 +86,22 @@ export default defineComponent({
 			return roundBadgeNumber(channel.value.unread);
 		});
 
+		const reconnectLabel = computed(() =>
+			store.state.isConnected ? "Reconnect network" : "Reconnect to server"
+		);
+
+		const reconnect = () => {
+			if (!store.state.isConnected) {
+				socket.connect();
+				return;
+			}
+
+			socket.emit("input", {
+				target: channel.value.id,
+				text: "/connect",
+			});
+		};
+
 		const onCollapseClick = () => {
 			collapseNetwork(props.network, !props.network.isCollapsed);
 		};
@@ -83,9 +111,12 @@ export default defineComponent({
 		};
 
 		return {
+			store,
 			channel,
 			joinChannelLabel,
 			unreadCount,
+			reconnectLabel,
+			reconnect,
 			onCollapseClick,
 			getExpandLabel,
 		};

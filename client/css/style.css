@@ -808,9 +808,31 @@ background on hover (unless active) */
 }
 
 .channel-list-item .not-connected-tooltip,
+.channel-list-item .reconnect-network-tooltip,
 .channel-list-item .not-secure-tooltip,
 .channel-list-item .parted-channel-tooltip {
 	margin: 0 8px;
+}
+
+.channel-list-item .reconnect-network {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	padding: 0;
+	border: 0;
+	border-radius: 3px;
+	background: transparent;
+	color: currentcolor;
+	opacity: 0.65;
+	cursor: pointer;
+}
+
+.channel-list-item .reconnect-network:hover,
+.channel-list-item .reconnect-network:focus-visible {
+	background: rgb(255 255 255 / 8%);
+	opacity: 1;
 }
 
 .channel-list-item.not-secure {
