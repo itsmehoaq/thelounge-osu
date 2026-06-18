@@ -14,24 +14,13 @@
 			type="text"
 			class="input"
 			name="channel"
-			placeholder="Channel"
+			placeholder="#channel or username"
 			pattern="[^\s]+"
 			maxlength="200"
-			title="The channel name may not contain spaces"
+			title="Channel names and usernames may not contain spaces"
 			required
 		/>
-		<input
-			v-model="inputPassword"
-			type="password"
-			class="input"
-			name="key"
-			placeholder="Password (optional)"
-			pattern="[^\s]+"
-			maxlength="200"
-			title="The channel password may not contain spaces"
-			autocomplete="new-password"
-		/>
-		<button type="submit" class="btn btn-small">Join</button>
+		<button type="submit" class="btn btn-small">Open</button>
 	</form>
 </template>
 
@@ -41,6 +30,7 @@ import {switchToChannel} from "../js/router";
 import socket from "../js/socket";
 import {useStore} from "../js/store";
 import {ClientNetwork, ClientChan} from "../js/types";
+import {ChanState} from "../../shared/types/chan";
 
 export default defineComponent({
 	name: "JoinChannel",
@@ -57,35 +47,32 @@ export default defineComponent({
 	setup(props, {emit}) {
 		const store = useStore();
 		const inputChannel = ref("");
-		const inputPassword = ref("");
 
 		const onSubmit = () => {
-			const existingChannel = store.getters.findChannelOnCurrentNetwork(inputChannel.value);
+			const target = inputChannel.value.trim();
 
-			if (existingChannel) {
+			if (!target) {
+				return;
+			}
+
+			const isChannel = target.startsWith("#");
+			const existingChannel = store.getters.findChannelOnCurrentNetwork(target);
+
+			if (existingChannel && (!isChannel || existingChannel.state !== ChanState.PARTED)) {
 				switchToChannel(existingChannel);
 			} else {
-				const chanTypes = props.network.serverOptions.CHANTYPES;
-				let channel = inputChannel.value;
-
-				if (chanTypes && chanTypes.length > 0 && !chanTypes.includes(channel[0])) {
-					channel = chanTypes[0] + channel;
-				}
-
 				socket.emit("input", {
-					text: `/join ${channel} ${inputPassword.value}`,
+					text: isChannel ? `/join ${target}` : `/query ${target}`,
 					target: props.channel.id,
 				});
 			}
 
 			inputChannel.value = "";
-			inputPassword.value = "";
 			emit("toggle-join-channel");
 		};
 
 		return {
 			inputChannel,
-			inputPassword,
 			onSubmit,
 		};
 	},

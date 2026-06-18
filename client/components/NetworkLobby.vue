@@ -67,7 +67,7 @@ export default defineComponent({
 		});
 
 		const joinChannelLabel = computed(() => {
-			return props.isJoinChannelShown ? "Cancel" : "Join a channel…";
+			return props.isJoinChannelShown ? "Cancel" : "Join a channel or message a user…";
 		});
 
 		const unreadCount = computed(() => {
