@@ -1,12 +1,4 @@
 <template>
-	<!-- Quals automation warning banner -->
-	<div
-		v-if="store.state.settings.refQualEnabled && qualState !== 'emergency'"
-		class="qa-quals-warning"
-	>
-		⚠ WARNING: Qualifiers Automation is enabled!
-	</div>
-
 	<!-- Emergency stop banner -->
 	<div v-if="qualState === 'emergency'" class="qa-emergency-banner">
 		<span class="qa-emergency-icon">!</span>
@@ -630,17 +622,6 @@ export default defineComponent({
 
 .qa-winner-dismiss:hover {
 	opacity: 1;
-}
-
-/* Quals automation warning banner */
-.qa-quals-warning {
-	padding: 4px 12px;
-	background: rgba(255, 191, 0, 0.08);
-	border-bottom: 1px solid rgba(255, 191, 0, 0.3);
-	color: #ffbf00;
-	font-family: monospace;
-	font-size: 11px;
-	letter-spacing: 0.04em;
 }
 
 /* Emergency banner */

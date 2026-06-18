@@ -2,6 +2,8 @@ import {ref} from "vue";
 import {store} from "../store";
 import {getOsuToken, fetchOsuMatch} from "./osuApi";
 import socket from "../socket";
+import {cleanIrcMessage} from "../../../shared/irc";
+import {getQualsMessageEvent, isBanchoBotNick} from "./qualifiers";
 
 // ─── Winner hint ────────────────────────────────────────────────────────────
 
@@ -162,21 +164,21 @@ function triggerEmergency(nick: string, text: string) {
 }
 
 function processQualsMessage(text: string) {
+	const event = getQualsMessageEvent(text);
+
 	switch (qualState.value) {
 		case "waiting_ready":
-			if (
-				/All players are ready/i.test(text) ||
-				/Everyone is ready/i.test(text) ||
-				/Countdown (?:has )?(?:ended|finished)/i.test(text)
-			) {
+			if (event === "ready") {
 				sendQualStart();
 			}
+
 			break;
 
 		case "running":
-			if (/The match has finished/i.test(text)) {
+			if (event === "finished") {
 				advanceQuals();
 			}
+
 			break;
 	}
 }
@@ -199,38 +201,44 @@ function advanceQuals() {
 
 // ─── BanchoBot message router ─────────────────────────────────────────────────
 
-export function processBanchoMessage(nick: string, text: string) {
-	if (!store.state.settings.refHelperEnabled) return;
-
+export function processBanchoMessage(nick: string, text: string, channelId?: number) {
 	const qualsActive =
 		qualState.value !== "idle" && qualState.value !== "done" && qualState.value !== "emergency";
+	const isBanchoBot = isBanchoBotNick(nick);
+	const normalizedText = cleanIrcMessage(text);
+	const isQualsChannel = channelId === undefined || channelId === qualsChannelId;
 
 	// Emergency word — any player, any message
-	if (qualsActive && nick !== "BanchoBot") {
+	if (qualsActive && isQualsChannel && !isBanchoBot) {
 		const eWord = String(store.state.settings.refQualEmergencyWord ?? "").trim();
-		if (eWord && text.toLowerCase().includes(eWord.toLowerCase())) {
-			triggerEmergency(nick, text);
+
+		if (eWord && normalizedText.toLowerCase().includes(eWord.toLowerCase())) {
+			triggerEmergency(nick, normalizedText);
 		}
+
 		return;
 	}
 
-	if (nick !== "BanchoBot") return;
+	if (qualsActive && isQualsChannel && isBanchoBot) {
+		processQualsMessage(normalizedText);
+
+		return;
+	}
+
+	if (!store.state.settings.refHelperEnabled || !isBanchoBot) {
+		return;
+	}
 
 	// Capture match ID when room is created
-	const matchUrlMatch = text.match(/osu\.ppy\.sh\/mp\/(\d+)/);
+	const matchUrlMatch = normalizedText.match(/osu\.ppy\.sh\/mp\/(\d+)/);
+
 	if (matchUrlMatch) {
 		currentMatchId = matchUrlMatch[1];
 		return;
 	}
 
-	// Quals state machine takes priority when active
-	if (qualsActive) {
-		processQualsMessage(text);
-		return;
-	}
-
 	// Winner hint (normal mode)
-	if (/The match has finished/i.test(text)) {
+	if (/The match has finished/i.test(normalizedText)) {
 		void fetchAndCalculate();
 	}
 }

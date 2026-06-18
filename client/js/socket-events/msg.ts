@@ -19,6 +19,7 @@ try {
 }
 
 socket.on("msg", function (data) {
+	const sourceChannelId = data.chan;
 	const receivingChannel = store.getters.findChannel(data.chan);
 
 	if (!receivingChannel) {
@@ -70,7 +71,7 @@ socket.on("msg", function (data) {
 	channel.messages.push(data.msg);
 
 	if (data.msg.from?.nick && data.msg.text) {
-		processBanchoMessage(data.msg.from.nick, data.msg.text);
+		processBanchoMessage(data.msg.from.nick, data.msg.text, sourceChannelId);
 	}
 
 	if (data.msg.self) {
