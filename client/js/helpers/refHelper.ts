@@ -3,7 +3,12 @@ import {store} from "../store";
 import {getOsuToken, fetchOsuMatch} from "./osuApi";
 import socket from "../socket";
 import {cleanIrcMessage} from "../../../shared/irc";
-import {getQualsMessageEvent, isBanchoBotNick, shouldTriggerQualsEmergency} from "./qualifiers";
+import {
+	getNextQualCursor,
+	getQualsMessageEvent,
+	isBanchoBotNick,
+	shouldTriggerQualsEmergency,
+} from "./qualifiers";
 
 // ─── Winner hint ────────────────────────────────────────────────────────────
 
@@ -27,6 +32,7 @@ type QualState =
 	| "running"
 	| "done"
 	| "emergency";
+type ResumableQualState = Exclude<QualState, "idle" | "done" | "emergency">;
 
 export interface QualMap {
 	label: string;
@@ -40,6 +46,7 @@ export const qualCurrentRun = ref(1);
 export const qualMappool = ref<QualMap[]>([]);
 export const qualEmergencyWho = ref<string | null>(null);
 export const qualEmergencyMsg = ref<string | null>(null);
+export const qualPausedState = ref<ResumableQualState | null>(null);
 
 let qualsChannelId: number | null = null;
 
@@ -84,6 +91,7 @@ export function startQuals(channelId: number) {
 	qualCurrentRun.value = 1;
 	qualEmergencyWho.value = null;
 	qualEmergencyMsg.value = null;
+	qualPausedState.value = null;
 
 	const emergencyWord = String(store.state.settings.refQualEmergencyWord ?? "");
 	sendQualCmd("Notice: Automation mode is active.");
@@ -99,12 +107,24 @@ export function abortQuals() {
 	qualsChannelId = null;
 	qualEmergencyWho.value = null;
 	qualEmergencyMsg.value = null;
+	qualPausedState.value = null;
 }
 
-export function resumeAfterEmergency() {
+export function resumeQualsCurrentMap() {
+	const resumeState = qualPausedState.value;
+
 	qualEmergencyWho.value = null;
 	qualEmergencyMsg.value = null;
-	qualState.value = "idle";
+	qualPausedState.value = null;
+	qualState.value =
+		resumeState ?? (qualMappool.value[qualCurrentMapIdx.value] ? "waiting_ready" : "idle");
+}
+
+export function resumeQualsNextMap() {
+	qualEmergencyWho.value = null;
+	qualEmergencyMsg.value = null;
+	qualPausedState.value = null;
+	advanceQuals();
 }
 
 function setNextMap() {
@@ -146,6 +166,10 @@ function playEmergencyBeeps() {
 }
 
 function triggerEmergency(nick: string, text: string) {
+	if (isResumableQualState(qualState.value)) {
+		qualPausedState.value = qualState.value;
+	}
+
 	qualState.value = "emergency";
 	qualEmergencyWho.value = nick;
 	qualEmergencyMsg.value = text;
@@ -161,6 +185,10 @@ function triggerEmergency(nick: string, text: string) {
 			new Notification("EMERGENCY STOP", {body: `${nick}: ${text}`});
 		} catch {}
 	}
+}
+
+function isResumableQualState(state: QualState): state is ResumableQualState {
+	return state !== "idle" && state !== "done" && state !== "emergency";
 }
 
 function processQualsMessage(text: string) {
@@ -186,17 +214,21 @@ function processQualsMessage(text: string) {
 function advanceQuals() {
 	const totalRuns = Number(store.state.settings.refQualTotalRuns) || 1;
 	const totalMaps = qualMappool.value.length;
+	const next = getNextQualCursor(
+		qualCurrentMapIdx.value,
+		qualCurrentRun.value,
+		totalMaps,
+		totalRuns
+	);
 
-	if (qualCurrentMapIdx.value < totalMaps - 1) {
-		qualCurrentMapIdx.value++;
+	if (next) {
+		qualCurrentMapIdx.value = next.mapIndex;
+		qualCurrentRun.value = next.run;
 		setNextMap();
-	} else if (qualCurrentRun.value < totalRuns) {
-		qualCurrentRun.value++;
-		qualCurrentMapIdx.value = 0;
-		setNextMap();
-	} else {
-		qualState.value = "done";
+		return;
 	}
+
+	qualState.value = "done";
 }
 
 // ─── BanchoBot message router ─────────────────────────────────────────────────

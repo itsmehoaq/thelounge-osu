@@ -1,5 +1,6 @@
 import {expect} from "chai";
 import {
+	getNextQualCursor,
 	getQualsMessageEvent,
 	isBanchoBotNick,
 	shouldTriggerQualsEmergency,
@@ -42,5 +43,11 @@ describe("qualifiers automation message detection", function () {
 
 	it("allows another player to trigger the emergency keyword", function () {
 		expect(shouldTriggerQualsEmergency("please !PANIC", "!panic", false, false)).to.equal(true);
+	});
+
+	it("finds the next qualifier map in pool order", function () {
+		expect(getNextQualCursor(0, 1, 3, 2)).to.deep.equal({mapIndex: 1, run: 1});
+		expect(getNextQualCursor(2, 1, 3, 2)).to.deep.equal({mapIndex: 0, run: 2});
+		expect(getNextQualCursor(2, 2, 3, 2)).to.equal(null);
 	});
 });

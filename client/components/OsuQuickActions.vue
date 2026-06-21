@@ -9,7 +9,6 @@
 			{{ qualEmergencyMsg }}
 		</span>
 		<div class="qa-emergency-actions">
-			<button class="qa-btn" @click="resumeAfterEmergency">Dismiss</button>
 			<button class="qa-btn qa-danger" @click="abortQuals">Abort Quals</button>
 		</div>
 	</div>
@@ -111,6 +110,16 @@
 				<Square :size="12" />
 				<span class="qa-label">Abort Quals</span>
 			</button>
+			<button
+				v-else
+				class="qa-btn qa-quals-resume"
+				:disabled="!store.state.isConnected"
+				title="Resume paused qualifiers automation"
+				@click="openResumePicker"
+			>
+				<Play :size="12" />
+				<span class="qa-label">Resume</span>
+			</button>
 		</template>
 
 		<template v-if="customButtons.length > 0">
@@ -167,6 +176,46 @@
 			</div>
 		</div>
 	</div>
+
+	<div
+		v-if="isVisible && resumePickerOpen && qualState === 'emergency'"
+		class="qa-pool-modal-backdrop"
+		@click.self="closeResumePicker"
+	>
+		<div
+			class="qa-pool-modal qa-resume-modal"
+			role="dialog"
+			aria-modal="true"
+			aria-label="Resume qualifiers"
+		>
+			<div class="qa-pool-modal-head">
+				<span class="qa-pool-title">Resume Quals</span>
+				<button
+					type="button"
+					class="qa-pool-close"
+					aria-label="Close"
+					@click="closeResumePicker"
+				>
+					x
+				</button>
+			</div>
+			<div class="qa-resume-options">
+				<button type="button" class="qa-resume-option" @click="resumeCurrentQuals">
+					<span class="qa-resume-option-title">Resume current map</span>
+					<span class="qa-resume-option-detail">{{ currentResumeDetail }}</span>
+				</button>
+				<button
+					type="button"
+					class="qa-resume-option"
+					:disabled="!nextResumeMap"
+					@click="resumeNextQuals"
+				>
+					<span class="qa-resume-option-title">Start next map</span>
+					<span class="qa-resume-option-detail">{{ nextResumeDetail }}</span>
+				</button>
+			</div>
+		</div>
+	</div>
 </template>
 
 <script lang="ts">
@@ -186,14 +235,17 @@ import {
 	qualCurrentMapIdx,
 	qualCurrentRun,
 	qualMappool,
+	qualPausedState,
 	qualEmergencyWho,
 	qualEmergencyMsg,
 	startQuals,
 	abortQuals,
-	resumeAfterEmergency,
+	resumeQualsCurrentMap,
+	resumeQualsNextMap,
 	type QualMap,
 } from "../js/helpers/refHelper";
 import {Settings, Clock, Play, Square, MapPinned, Download} from "lucide-vue-next";
+import {getNextQualCursor} from "../js/helpers/qualifiers";
 
 export default defineComponent({
 	name: "OsuQuickActions",
@@ -205,6 +257,7 @@ export default defineComponent({
 	setup(props) {
 		const store = useStore();
 		const poolPickerOpen = ref(false);
+		const resumePickerOpen = ref(false);
 
 		const isVisible = computed(() => /^#mp_/i.test(props.channel.name));
 
@@ -213,7 +266,7 @@ export default defineComponent({
 		};
 
 		const openPoolPicker = () => {
-			if (!store.state.isConnected || !parsedMappool.value.length) {
+			if (!store.state.isConnected) {
 				return;
 			}
 
@@ -224,23 +277,39 @@ export default defineComponent({
 			poolPickerOpen.value = false;
 		};
 
+		const openResumePicker = () => {
+			if (!store.state.isConnected) {
+				return;
+			}
+
+			resumePickerOpen.value = true;
+		};
+
+		const closeResumePicker = () => {
+			resumePickerOpen.value = false;
+		};
+
 		const sendSettings = () => send("!mp settings");
 
 		const sendTimer = () => {
 			const t = Number(store.state.settings.refTimerDefault) || 120;
 			send(`!mp timer ${t}`);
 		};
+
 		const sendStart = () => {
 			const t = Number(store.state.settings.refStartTimer);
 			send(t > 0 ? `!mp start ${t}` : "!mp start");
 		};
+
 		const sendAbort = () => send("!mp abort");
 
 		const saveChatLog = () => requestChatLog(props.channel.id);
 
 		const runCustom = (btn: QuickButton) => {
 			for (const cmd of btn.commands) {
-				if (cmd.trim()) send(cmd.trim());
+				if (cmd.trim()) {
+					send(cmd.trim());
+				}
 			}
 		};
 
@@ -316,6 +385,80 @@ export default defineComponent({
 			return groups;
 		});
 
+		const nextResumeCursor = computed(() =>
+			getNextQualCursor(
+				qualCurrentMapIdx.value,
+				qualCurrentRun.value,
+				qualMappool.value.length,
+				qualTotalRuns.value
+			)
+		);
+
+		const nextResumeMap = computed(() => {
+			const cursor = nextResumeCursor.value;
+
+			return cursor ? qualMappool.value[cursor.mapIndex] : undefined;
+		});
+
+		const getResumeMapDetail = (map: QualMap | undefined, run: number, fallback: string) => {
+			if (!map) {
+				return fallback;
+			}
+
+			return `${map.label} - ${map.id} - ${getMapModLabel(map)} - Run ${run}/${
+				qualTotalRuns.value
+			}`;
+		};
+
+		const pausedStateLabel = computed(() => {
+			switch (qualPausedState.value) {
+				case "waiting_ready":
+					return "waiting for players";
+				case "running":
+					return "waiting for match finish";
+				case "setting_map":
+					return "setting map";
+				case "verifying":
+					return "verifying map";
+				default:
+					return "paused";
+			}
+		});
+
+		const currentResumeDetail = computed(() => {
+			const detail = getResumeMapDetail(
+				currentQualMap.value,
+				qualCurrentRun.value,
+				"No current map"
+			);
+
+			return `${detail} - ${pausedStateLabel.value}`;
+		});
+
+		const nextResumeDetail = computed(() => {
+			const cursor = nextResumeCursor.value;
+
+			if (!cursor) {
+				return "No next map in pool order";
+			}
+
+			return getResumeMapDetail(nextResumeMap.value, cursor.run, "No next map");
+		});
+
+		const resumeCurrentQuals = () => {
+			resumeQualsCurrentMap();
+			closeResumePicker();
+		};
+
+		const resumeNextQuals = () => {
+			if (!nextResumeMap.value) {
+				return;
+			}
+
+			resumeQualsNextMap();
+			closeResumePicker();
+		};
+
 		const qualStateLabel = computed(() => {
 			switch (qualState.value) {
 				case "setting_map":
@@ -337,6 +480,7 @@ export default defineComponent({
 			store,
 			isVisible,
 			poolPickerOpen,
+			resumePickerOpen,
 			customButtons,
 			winnerHint,
 			winnerHintError,
@@ -345,19 +489,26 @@ export default defineComponent({
 			qualCurrentMapIdx,
 			qualCurrentRun,
 			qualMappool,
+			qualPausedState,
 			qualEmergencyWho,
 			qualEmergencyMsg,
 			startQuals,
 			abortQuals,
-			resumeAfterEmergency,
+			resumeCurrentQuals,
+			resumeNextQuals,
 			parsedMappool,
 			groupedMappool,
 			qualsRunning,
 			currentQualMap,
+			nextResumeMap,
 			qualTotalRuns,
 			qualStateLabel,
 			openPoolPicker,
 			closePoolPicker,
+			openResumePicker,
+			closeResumePicker,
+			currentResumeDetail,
+			nextResumeDetail,
 			pickMap,
 			getMapPickTitle,
 			getMapModLabel,
@@ -573,12 +724,60 @@ export default defineComponent({
 	color: #66ddaa;
 }
 
+.qa-resume-modal {
+	width: min(520px, calc(100vw - 24px));
+}
+
+.qa-resume-options {
+	display: grid;
+	gap: 8px;
+	padding: 10px;
+}
+
+.qa-resume-option {
+	display: grid;
+	gap: 4px;
+	padding: 10px;
+	background: rgba(255, 255, 255, 0.02);
+	border: 1px solid #2a2a40;
+	border-radius: 4px;
+	color: #9999bb;
+	cursor: pointer;
+	font-family: monospace;
+	text-align: left;
+}
+
+.qa-resume-option:hover:not(:disabled) {
+	color: #66ddaa;
+	background: rgba(102, 221, 170, 0.08);
+	border-color: rgba(102, 221, 170, 0.24);
+}
+
+.qa-resume-option:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.qa-resume-option-title {
+	font-size: 12px;
+	font-weight: 700;
+}
+
+.qa-resume-option-detail {
+	overflow: hidden;
+	color: #777799;
+	font-size: 10px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .morning .qa-pool-modal {
 	border-color: #28333d;
 }
 
 .morning .qa-pool-modal-head,
-.morning .qa-pool-map {
+.morning .qa-pool-map,
+.morning .qa-resume-option {
 	border-color: #28333d;
 }
 

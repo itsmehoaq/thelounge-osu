@@ -1,6 +1,10 @@
 import {cleanIrcMessage} from "../../../shared/irc";
 
 export type QualsMessageEvent = "ready" | "finished";
+export type QualCursor = {
+	mapIndex: number;
+	run: number;
+};
 
 export function isBanchoBotNick(nick: string): boolean {
 	return nick.trim().toLowerCase() === "banchobot";
@@ -19,6 +23,27 @@ export function shouldTriggerQualsEmergency(
 	}
 
 	return cleanIrcMessage(text).toLowerCase().includes(normalizedEmergencyWord);
+}
+
+export function getNextQualCursor(
+	currentMapIndex: number,
+	currentRun: number,
+	totalMaps: number,
+	totalRuns: number
+): QualCursor | null {
+	if (totalMaps <= 0) {
+		return null;
+	}
+
+	if (currentMapIndex < totalMaps - 1) {
+		return {mapIndex: currentMapIndex + 1, run: currentRun};
+	}
+
+	if (currentRun < Math.max(1, totalRuns)) {
+		return {mapIndex: 0, run: currentRun + 1};
+	}
+
+	return null;
 }
 
 export function getQualsMessageEvent(text: string): QualsMessageEvent | null {
