@@ -30,11 +30,14 @@
 		<span class="qa-winner-text">{{ winnerHint }}</span>
 		<button class="qa-winner-dismiss" @click="clearWinnerHint">×</button>
 	</div>
+	<div v-if="isVisible && mappoolWarning" class="qa-mappool-warning">
+		{{ mappoolWarning }}
+	</div>
 	<div v-if="isVisible" id="osu-quick-actions">
 		<button
 			class="qa-btn qa-pool"
-			:disabled="!store.state.isConnected || !parsedMappool.length"
-			:title="parsedMappool.length ? 'Open mappool picker' : 'Import a mappool first'"
+			:disabled="!store.state.isConnected || !availableMappools.length"
+			:title="availableMappools.length ? 'Open mappool picker' : 'Import a mappool first'"
 			@click="openPoolPicker"
 		>
 			<MapPinned :size="12" />
@@ -91,10 +94,8 @@
 			<button
 				v-if="qualState === 'idle' || qualState === 'done'"
 				class="qa-btn qa-quals-start"
-				:disabled="!store.state.isConnected || !parsedMappool.length"
-				:title="`Start Qualifiers (${parsedMappool.length} maps, ${qualTotalRuns} run${
-					qualTotalRuns > 1 ? 's' : ''
-				})`"
+				:disabled="!store.state.isConnected || !availableMappools.length"
+				:title="qualStartTitle"
 				@click="startQuals(channel.id)"
 			>
 				<Play :size="12" />
@@ -139,7 +140,7 @@
 	</div>
 
 	<div
-		v-if="isVisible && poolPickerOpen && parsedMappool.length"
+		v-if="isVisible && poolPickerOpen && availableMappools.length"
 		class="qa-pool-modal-backdrop"
 		@click.self="closePoolPicker"
 	>
@@ -155,7 +156,24 @@
 					x
 				</button>
 			</div>
-			<div class="qa-pool-groups">
+			<div v-if="availableMappools.length > 1" class="qa-pool-selector">
+				<label class="qa-pool-selector-label" for="qa-active-pool">Mappool</label>
+				<select
+					id="qa-active-pool"
+					:value="activePoolSlug"
+					class="qa-pool-select"
+					@change="selectPoolForChannel"
+				>
+					<option value="">Select mappool</option>
+					<option v-for="pool in availableMappools" :key="pool.slug" :value="pool.slug">
+						{{ pool.slug }} ({{ pool.maps.length }} maps)
+					</option>
+				</select>
+			</div>
+			<div v-if="!activeMappool" class="qa-pool-empty">
+				No valid mappool found. Please assign a mappool for this lobby.
+			</div>
+			<div v-else class="qa-pool-groups">
 				<section v-for="group in groupedMappool" :key="group.name" class="qa-pool-group">
 					<div class="qa-pool-group-title">{{ group.name }}</div>
 					<div class="qa-pool-grid">
@@ -223,7 +241,6 @@ import {defineComponent, PropType, computed, ref} from "vue";
 import {useStore} from "../js/store";
 import socket from "../js/socket";
 import type {ClientNetwork, ClientChan} from "../js/types";
-import {ChanType} from "../../shared/types/chan";
 import {customButtons, type QuickButton} from "../js/helpers/quickButtons";
 import {getLucideIcon} from "../js/helpers/lucideIcons";
 import {requestChatLog} from "../js/helpers/chatLog";
@@ -236,16 +253,23 @@ import {
 	qualCurrentRun,
 	qualMappool,
 	qualPausedState,
+	qualLobbyNames,
+	qualChannelMappoolSlugs,
+	qualMappoolWarnings,
 	qualEmergencyWho,
 	qualEmergencyMsg,
 	startQuals,
 	abortQuals,
+	assignQualMappoolToChannel,
+	findQualMappoolBySlug,
+	getQualMapModCommand,
+	readQualMappools,
 	resumeQualsCurrentMap,
 	resumeQualsNextMap,
 	type QualMap,
 } from "../js/helpers/refHelper";
 import {Settings, Clock, Play, Square, MapPinned, Download} from "lucide-vue-next";
-import {getNextQualCursor} from "../js/helpers/qualifiers";
+import {getMappoolSlugFromLobbyName, getNextQualCursor} from "../js/helpers/qualifiers";
 
 export default defineComponent({
 	name: "OsuQuickActions",
@@ -314,7 +338,7 @@ export default defineComponent({
 		};
 
 		const getMapPickCommands = (map: QualMap) => {
-			const mod = String(map.mod ?? "").trim();
+			const mod = getQualMapModCommand(map);
 			const timer = Number(store.state.settings.refTimerDefault) || 120;
 
 			return [
@@ -326,7 +350,7 @@ export default defineComponent({
 
 		const getMapPickTitle = (map: QualMap) => getMapPickCommands(map).join("\n");
 
-		const getMapModLabel = (map: QualMap) => String(map.mod ?? "").trim() || "No mod";
+		const getMapModLabel = (map: QualMap) => getQualMapModCommand(map) || "No mod";
 
 		const pickMap = (map: QualMap) => {
 			for (const cmd of getMapPickCommands(map)) {
@@ -347,23 +371,42 @@ export default defineComponent({
 
 		const qualTotalRuns = computed(() => Number(store.state.settings.refQualTotalRuns) || 1);
 
-		const parsedMappool = computed<QualMap[]>(() => {
-			try {
-				const stored = JSON.parse(String(store.state.settings.refQualMappoolParsed ?? ""));
+		const availableMappools = computed(() => readQualMappools());
 
-				if (!Array.isArray(stored)) {
-					return [];
-				}
+		const detectedPoolSlug = computed(() =>
+			getMappoolSlugFromLobbyName(qualLobbyNames.value[props.channel.id] ?? "")
+		);
 
-				return stored.filter(
-					(map): map is QualMap =>
-						typeof map?.label === "string" &&
-						typeof map?.id === "string" &&
-						typeof map?.mod === "string"
-				);
-			} catch {
-				return [];
+		const assignedPoolSlug = computed(() => {
+			return qualChannelMappoolSlugs.value[props.channel.id] ?? "";
+		});
+
+		const activePoolSlug = computed(() => {
+			if (availableMappools.value.length === 1) {
+				return availableMappools.value[0].slug;
 			}
+
+			return assignedPoolSlug.value || detectedPoolSlug.value;
+		});
+
+		const activeMappool = computed(() =>
+			findQualMappoolBySlug(availableMappools.value, activePoolSlug.value)
+		);
+
+		const parsedMappool = computed<QualMap[]>(() => activeMappool.value?.maps ?? []);
+
+		const mappoolWarning = computed(() => qualMappoolWarnings.value[props.channel.id] ?? "");
+
+		const qualStartTitle = computed(() => {
+			const mapCount = parsedMappool.value.length;
+
+			if (!mapCount && availableMappools.value.length > 1) {
+				return 'No valid mappool found. Please assign a mappool in "Map Pick"';
+			}
+
+			return `Start Qualifiers (${mapCount} maps, ${qualTotalRuns.value} run${
+				qualTotalRuns.value > 1 ? "s" : ""
+			})`;
 		});
 
 		const groupedMappool = computed(() => {
@@ -384,6 +427,16 @@ export default defineComponent({
 
 			return groups;
 		});
+
+		const selectPoolForChannel = (event: Event) => {
+			const target = event.target as HTMLSelectElement;
+
+			if (!target.value) {
+				return;
+			}
+
+			assignQualMappoolToChannel(props.channel.id, target.value);
+		};
 
 		const nextResumeCursor = computed(() =>
 			getNextQualCursor(
@@ -481,6 +534,11 @@ export default defineComponent({
 			isVisible,
 			poolPickerOpen,
 			resumePickerOpen,
+			availableMappools,
+			activePoolSlug,
+			activeMappool,
+			mappoolWarning,
+			qualStartTitle,
 			customButtons,
 			winnerHint,
 			winnerHintError,
@@ -505,6 +563,7 @@ export default defineComponent({
 			qualStateLabel,
 			openPoolPicker,
 			closePoolPicker,
+			selectPoolForChannel,
 			openResumePicker,
 			closeResumePicker,
 			currentResumeDetail,
@@ -654,6 +713,48 @@ export default defineComponent({
 	color: #ff66aa;
 	background: rgba(255, 102, 170, 0.09);
 	border-color: rgba(255, 102, 170, 0.2);
+}
+
+.qa-mappool-warning {
+	padding: 4px 12px;
+	background: rgba(255, 194, 102, 0.12);
+	border-bottom: 1px solid rgba(255, 194, 102, 0.28);
+	color: #ffc266;
+	font-family: monospace;
+	font-size: 12px;
+}
+
+.qa-pool-selector {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 12px 0;
+}
+
+.qa-pool-selector-label {
+	color: #777799;
+	font-family: monospace;
+	font-size: 11px;
+	font-weight: 700;
+	text-transform: uppercase;
+}
+
+.qa-pool-select {
+	min-width: 180px;
+	height: 26px;
+	background: rgba(255, 255, 255, 0.02);
+	border: 1px solid #2a2a40;
+	border-radius: 4px;
+	color: #9999bb;
+	font-family: monospace;
+	font-size: 11px;
+}
+
+.qa-pool-empty {
+	padding: 12px;
+	color: #ffc266;
+	font-family: monospace;
+	font-size: 12px;
 }
 
 .qa-pool-groups {

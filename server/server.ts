@@ -525,16 +525,7 @@ function initializeClient(
 
 	socket.on("input", (data) => {
 		if (_.isPlainObject(data)) {
-			const shouldSaveChatLog =
-				typeof data.target === "number" &&
-				typeof data.text === "string" &&
-				data.text.split("\n").some((line) => /^\s*!mp\s+close\b/i.test(line));
-
 			client.input(data);
-
-			if (shouldSaveChatLog) {
-				setTimeout(() => emitChatLog(data.target), 1000);
-			}
 		}
 	});
 

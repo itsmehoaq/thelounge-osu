@@ -5,7 +5,7 @@ import {switchToChannel} from "../router";
 import {ClientChan, NetChan, ClientMessage} from "../types";
 import {SharedMsg, MessageType} from "../../../shared/types/msg";
 import {ChanType} from "../../../shared/types/chan";
-import {processBanchoMessage} from "../helpers/refHelper";
+import {processBanchoMessage, processRefereeMessage} from "../helpers/refHelper";
 
 let pop;
 
@@ -69,6 +69,10 @@ socket.on("msg", function (data) {
 	}
 
 	channel.messages.push(data.msg);
+
+	if (data.msg.self && data.msg.text) {
+		processRefereeMessage(data.msg.text);
+	}
 
 	if (data.msg.from?.nick && data.msg.text) {
 		processBanchoMessage(

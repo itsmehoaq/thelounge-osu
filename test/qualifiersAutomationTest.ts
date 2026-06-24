@@ -1,5 +1,7 @@
 import {expect} from "chai";
 import {
+	buildMappoolModCommand,
+	getMappoolSlugFromLobbyName,
 	getNextQualCursor,
 	getQualsMessageEvent,
 	isBanchoBotNick,
@@ -49,5 +51,19 @@ describe("qualifiers automation message detection", function () {
 		expect(getNextQualCursor(0, 1, 3, 2)).to.deep.equal({mapIndex: 1, run: 1});
 		expect(getNextQualCursor(2, 1, 3, 2)).to.deep.equal({mapIndex: 0, run: 2});
 		expect(getNextQualCursor(2, 2, 3, 2)).to.equal(null);
+	});
+
+	it("appends NF to mappool mod commands when enabled", function () {
+		expect(buildMappoolModCommand("", true)).to.equal("nf");
+		expect(buildMappoolModCommand("hd", true)).to.equal("hd nf");
+		expect(buildMappoolModCommand("hd nf", true)).to.equal("hd nf");
+		expect(buildMappoolModCommand("freemod", true)).to.equal("freemod");
+		expect(buildMappoolModCommand("hr", false)).to.equal("hr");
+	});
+
+	it("detects the mappool abbreviation from lobby names", function () {
+		expect(getMappoolSlugFromLobbyName("ABC: (Team A) vs (Team B)")).to.equal("ABC");
+		expect(getMappoolSlugFromLobbyName("abc-1 : Team A vs Team B")).to.equal("ABC-1");
+		expect(getMappoolSlugFromLobbyName("(Team A) vs (Team B)")).to.equal(null);
 	});
 });

@@ -752,6 +752,15 @@ class Client {
 
 	part(network: Network, chan: Chan) {
 		const client = this;
+
+		if (/^#mp_/i.test(chan.name)) {
+			client.emit("chatlog:data", {
+				target: chan.id,
+				channelName: chan.name,
+				messages: chan.messages,
+			});
+		}
+
 		network.channels = _.without(network.channels, chan);
 		client.mentions = client.mentions.filter((msg) => !(msg.chanId === chan.id));
 		chan.destroy();

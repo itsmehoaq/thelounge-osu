@@ -4,6 +4,7 @@ import {switchToChannel} from "../router";
 import {toClientChan} from "../chan";
 import {ClientNetwork} from "../types";
 import {ChanState} from "../../../shared/types/chan";
+import {handleMappoolChannelJoined} from "../helpers/refHelper";
 
 socket.on("network", function (data) {
 	const network: ClientNetwork = {
@@ -59,6 +60,10 @@ socket.on("channel:state", function (data) {
 
 	if (channel) {
 		channel.channel.state = data.state;
+
+		if (data.state === ChanState.JOINED) {
+			handleMappoolChannelJoined(channel.channel.id, channel.channel.name);
+		}
 	}
 });
 

@@ -191,6 +191,14 @@ const defaultConfig = {
 		default: "",
 		sync: "never",
 	},
+	refQualMappools: {
+		default: "",
+		sync: "never",
+	},
+	refQualActiveMappoolSlug: {
+		default: "",
+		sync: "never",
+	},
 	refQualNfEnabled: {
 		default: false,
 	},

@@ -156,6 +156,62 @@
 				<p class="rh-section-label">Mappool</p>
 
 				<div class="osu-field">
+					<label class="osu-label">Active pool</label>
+					<div class="rh-pool-toolbar">
+						<select
+							:value="selectedPoolSlug"
+							class="input rh-select"
+							@change="selectMappool"
+						>
+							<option v-if="!mappools.length" value="">No saved pools</option>
+							<option v-for="pool in mappools" :key="pool.slug" :value="pool.slug">
+								{{ pool.slug }} ({{ pool.maps.length }} maps)
+							</option>
+						</select>
+						<button type="button" class="btn btn-small" @click="createMappool">
+							New Pool
+						</button>
+						<button
+							type="button"
+							class="btn btn-small"
+							:disabled="!mappools.length"
+							@click="deleteMappool"
+						>
+							Delete
+						</button>
+					</div>
+					<p class="osu-hint">
+						Use the lobby prefix as the abbreviation, e.g.
+						<code class="rh-inline-code">ABC: (Team A) vs (Team B)</code> selects pool
+						<code class="rh-inline-code">ABC</code>.
+					</p>
+				</div>
+
+				<div class="opt rh-inline-toggle">
+					<label>
+						<input
+							:checked="store.state.settings.refQualNfEnabled"
+							type="checkbox"
+							name="refQualNfEnabled"
+						/>
+						Add NF to all maps in pool
+					</label>
+				</div>
+
+				<div class="osu-field">
+					<label for="rh-qual-pool-slug" class="osu-label">Pool abbreviation</label>
+					<input
+						id="rh-qual-pool-slug"
+						:value="poolSlug"
+						type="text"
+						class="input rh-api-input"
+						placeholder="ABC"
+						@keydown.stop
+						@change="onPoolSlugChange"
+					/>
+				</div>
+
+				<div class="osu-field">
 					<label for="rh-qual-mappool" class="osu-label">Imported maps</label>
 					<p class="osu-hint">
 						Paste from spreadsheet (tab-separated):
@@ -164,20 +220,20 @@
 					</p>
 					<textarea
 						id="rh-qual-mappool"
-						:value="store.state.settings.refQualMappool"
-						name="refQualMappool"
+						v-model="rawMappool"
 						class="input rh-mappool-textarea"
 						placeholder="NM1&#9;1234567&#10;NM2&#9;2345678&#10;HD1&#9;3456789"
 						spellcheck="false"
 						@keydown.stop
 					/>
-					<button
-						type="button"
-						class="btn btn-small rh-import-btn"
-						@click="importMappool"
-					>
-						Import
-					</button>
+					<div class="rh-pool-toolbar rh-import-toolbar">
+						<button type="button" class="btn btn-small" @click="importMappool">
+							Import
+						</button>
+						<button type="button" class="btn btn-small" @click="saveMappool">
+							Save Pool
+						</button>
+					</div>
 
 					<div v-if="parsedMaps.length" class="rh-map-grid">
 						<div class="rh-map-grid-head">
@@ -206,32 +262,122 @@
 <script lang="ts">
 import {defineComponent, ref} from "vue";
 import {useStore} from "../../js/store";
-import {parseMappool, type QualMap} from "../../js/helpers/refHelper";
+import {
+	parseMappool,
+	readQualMappools,
+	type QualMap,
+	type QualMappool,
+} from "../../js/helpers/refHelper";
+import {normalizeMappoolSlug} from "../../js/helpers/qualifiers";
 
 export default defineComponent({
 	name: "RefHelperSettings",
 	setup() {
 		const store = useStore();
 
+		const mappools = ref<QualMappool[]>(readQualMappools());
+		const selectedPoolSlug = ref(
+			normalizeMappoolSlug(String(store.state.settings.refQualActiveMappoolSlug ?? "")) ||
+				mappools.value[0]?.slug ||
+				"DEFAULT"
+		);
+		const poolSlug = ref(selectedPoolSlug.value);
+		const rawMappool = ref("");
 		const parsedMaps = ref<QualMap[]>([]);
 
-		try {
-			const stored = JSON.parse(String(store.state.settings.refQualMappoolParsed ?? ""));
-			if (Array.isArray(stored)) parsedMaps.value = stored;
-		} catch {
-			parsedMaps.value = [];
-		}
+		const updateSetting = (name: string, value: string) => {
+			void store.dispatch("settings/update", {name, value, sync: true});
+		};
+
+		const loadPool = (slug: string) => {
+			const normalizedSlug = normalizeMappoolSlug(slug);
+			const pool = mappools.value.find((item) => item.slug === normalizedSlug);
+
+			selectedPoolSlug.value = normalizedSlug || "DEFAULT";
+			poolSlug.value = selectedPoolSlug.value;
+			rawMappool.value = pool?.raw ?? String(store.state.settings.refQualMappool ?? "");
+			parsedMaps.value = pool ? [...pool.maps] : [];
+		};
 
 		const persist = () => {
-			void store.dispatch("settings/update", {
-				name: "refQualMappoolParsed",
-				value: JSON.stringify(parsedMaps.value),
-				sync: true,
-			});
+			const normalizedSlug = normalizeMappoolSlug(poolSlug.value || selectedPoolSlug.value);
+
+			if (!normalizedSlug) {
+				return;
+			}
+
+			const nextPool = {
+				slug: normalizedSlug,
+				raw: rawMappool.value,
+				maps: parsedMaps.value,
+			};
+			const otherPools = mappools.value.filter((pool) => pool.slug !== normalizedSlug);
+
+			mappools.value = [...otherPools, nextPool].sort((a, b) => a.slug.localeCompare(b.slug));
+			selectedPoolSlug.value = normalizedSlug;
+			poolSlug.value = normalizedSlug;
+
+			updateSetting("refQualMappools", JSON.stringify(mappools.value));
+			updateSetting("refQualActiveMappoolSlug", normalizedSlug);
+			updateSetting("refQualMappool", rawMappool.value);
+			updateSetting("refQualMappoolParsed", JSON.stringify(parsedMaps.value));
 		};
 
 		const importMappool = () => {
-			parsedMaps.value = parseMappool(String(store.state.settings.refQualMappool ?? ""));
+			parsedMaps.value = parseMappool(rawMappool.value);
+			persist();
+		};
+
+		const saveMappool = () => {
+			persist();
+		};
+
+		const selectMappool = (event: Event) => {
+			const target = event.target as HTMLSelectElement;
+			loadPool(target.value);
+			updateSetting("refQualActiveMappoolSlug", normalizeMappoolSlug(target.value));
+		};
+
+		const createMappool = () => {
+			let index = mappools.value.length + 1;
+			let slug = `POOL${index}`;
+
+			while (mappools.value.some((pool) => pool.slug === slug)) {
+				index++;
+				slug = `POOL${index}`;
+			}
+
+			selectedPoolSlug.value = slug;
+			poolSlug.value = slug;
+			rawMappool.value = "";
+			parsedMaps.value = [];
+			updateSetting("refQualActiveMappoolSlug", slug);
+		};
+
+		const deleteMappool = () => {
+			const slug = normalizeMappoolSlug(selectedPoolSlug.value);
+
+			mappools.value = mappools.value.filter((pool) => pool.slug !== slug);
+
+			const nextSlug = mappools.value[0]?.slug ?? "DEFAULT";
+			updateSetting("refQualMappools", JSON.stringify(mappools.value));
+			updateSetting("refQualActiveMappoolSlug", nextSlug);
+			loadPool(nextSlug);
+		};
+
+		const onPoolSlugChange = (event: Event) => {
+			const target = event.target as HTMLInputElement;
+			const previousSlug = selectedPoolSlug.value;
+			const nextSlug = normalizeMappoolSlug(target.value);
+
+			if (!nextSlug) {
+				poolSlug.value = previousSlug;
+				return;
+			}
+
+			mappools.value = mappools.value.filter((pool) => pool.slug !== previousSlug);
+			poolSlug.value = nextSlug;
+			selectedPoolSlug.value = nextSlug;
 			persist();
 		};
 
@@ -241,7 +387,23 @@ export default defineComponent({
 			persist();
 		};
 
-		return {store, parsedMaps, importMappool, onModChange};
+		loadPool(selectedPoolSlug.value);
+
+		return {
+			store,
+			mappools,
+			selectedPoolSlug,
+			poolSlug,
+			rawMappool,
+			parsedMaps,
+			importMappool,
+			saveMappool,
+			selectMappool,
+			createMappool,
+			deleteMappool,
+			onPoolSlugChange,
+			onModChange,
+		};
 	},
 });
 </script>
@@ -349,7 +511,14 @@ export default defineComponent({
 	tab-size: 4;
 }
 
-.rh-import-btn {
+.rh-pool-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+}
+
+.rh-import-toolbar {
 	margin-top: 8px;
 }
 

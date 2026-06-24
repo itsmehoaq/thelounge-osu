@@ -3,6 +3,7 @@ import {store} from "../store";
 import {switchToChannel} from "../router";
 import {ClientChan} from "../types";
 import {toClientChan} from "../chan";
+import {handleMappoolChannelJoined} from "../helpers/refHelper";
 
 socket.on("join", function (data) {
 	const network = store.getters.findNetwork(data.network);
@@ -13,6 +14,7 @@ socket.on("join", function (data) {
 
 	const clientChan: ClientChan = toClientChan(data.chan);
 	network.channels.splice(data.index || -1, 0, clientChan);
+	handleMappoolChannelJoined(clientChan.id, clientChan.name);
 
 	// Queries do not automatically focus, unless the user did a whois
 	if (data.chan.type === "query" && !data.shouldOpen) {

@@ -4,9 +4,12 @@ import {getOsuToken, fetchOsuMatch} from "./osuApi";
 import socket from "../socket";
 import {cleanIrcMessage} from "../../../shared/irc";
 import {
+	buildMappoolModCommand,
+	getMappoolSlugFromLobbyName,
 	getNextQualCursor,
 	getQualsMessageEvent,
 	isBanchoBotNick,
+	normalizeMappoolSlug,
 	shouldTriggerQualsEmergency,
 } from "./qualifiers";
 
@@ -40,6 +43,12 @@ export interface QualMap {
 	mod: string;
 }
 
+export interface QualMappool {
+	slug: string;
+	raw: string;
+	maps: QualMap[];
+}
+
 export const qualState = ref<QualState>("idle");
 export const qualCurrentMapIdx = ref(0);
 export const qualCurrentRun = ref(1);
@@ -47,8 +56,13 @@ export const qualMappool = ref<QualMap[]>([]);
 export const qualEmergencyWho = ref<string | null>(null);
 export const qualEmergencyMsg = ref<string | null>(null);
 export const qualPausedState = ref<ResumableQualState | null>(null);
+export const qualLobbyNames = ref<Record<number, string>>({});
+export const qualChannelMappoolSlugs = ref<Record<number, string>>({});
+export const qualMappoolWarnings = ref<Record<number, string>>({});
 
 let qualsChannelId: number | null = null;
+let pendingMadeLobbyName: string | null = null;
+const requestedLobbySettingsChannels = new Set<number>();
 
 const MOD_MAP: Record<string, string> = {
 	NM: "",
@@ -75,23 +89,208 @@ export function parseMappool(raw: string): QualMap[] {
 		});
 }
 
-export function startQuals(channelId: number) {
-	let maps: QualMap[] = [];
-	try {
-		const parsed = JSON.parse(String(store.state.settings.refQualMappoolParsed ?? ""));
-		if (Array.isArray(parsed)) maps = parsed;
-	} catch {
-		maps = [];
+export function getQualMapModCommand(map: QualMap): string {
+	return buildMappoolModCommand(
+		String(map.mod ?? ""),
+		Boolean(store.state.settings.refQualNfEnabled)
+	);
+}
+
+export function readQualMappools(): QualMappool[] {
+	const pools = parseStoredMappools(String(store.state.settings.refQualMappools ?? ""));
+
+	if (pools.length) {
+		return pools;
 	}
-	if (!maps.length) return;
+
+	const legacyMaps = parseStoredMaps(String(store.state.settings.refQualMappoolParsed ?? ""));
+
+	if (!legacyMaps.length) {
+		return [];
+	}
+
+	return [
+		{
+			slug: normalizeMappoolSlug(
+				String(store.state.settings.refQualActiveMappoolSlug || "DEFAULT")
+			),
+			raw: String(store.state.settings.refQualMappool ?? ""),
+			maps: legacyMaps,
+		},
+	];
+}
+
+export function findQualMappoolBySlug(
+	pools: QualMappool[],
+	slug: string | null | undefined
+): QualMappool | null {
+	const normalizedSlug = normalizeMappoolSlug(String(slug ?? ""));
+
+	if (!normalizedSlug) {
+		return null;
+	}
+
+	return pools.find((pool) => normalizeMappoolSlug(pool.slug) === normalizedSlug) ?? null;
+}
+
+export function getQualMappoolForChannel(channelId: number): QualMappool | null {
+	const pools = readQualMappools();
+
+	if (pools.length === 1) {
+		return pools[0];
+	}
+
+	const assignedPool = findQualMappoolBySlug(pools, qualChannelMappoolSlugs.value[channelId]);
+
+	if (assignedPool) {
+		return assignedPool;
+	}
+
+	const detectedSlug = getMappoolSlugFromLobbyName(qualLobbyNames.value[channelId] ?? "");
+
+	return findQualMappoolBySlug(pools, detectedSlug);
+}
+
+export function assignQualMappoolToChannel(channelId: number, slug: string) {
+	const normalizedSlug = normalizeMappoolSlug(slug);
+
+	qualChannelMappoolSlugs.value = {
+		...qualChannelMappoolSlugs.value,
+		[channelId]: normalizedSlug,
+	};
+	clearQualMappoolWarning(channelId);
+}
+
+export function handleMappoolChannelJoined(channelId: number, channelName: string) {
+	if (!/^#mp_/i.test(channelName)) {
+		return;
+	}
+
+	if (pendingMadeLobbyName) {
+		setQualLobbyName(channelId, pendingMadeLobbyName);
+		pendingMadeLobbyName = null;
+	}
+
+	if (requestedLobbySettingsChannels.has(channelId)) {
+		return;
+	}
+
+	requestedLobbySettingsChannels.add(channelId);
+	setTimeout(() => {
+		socket.emit("input", {target: channelId, text: "!mp settings"});
+	}, 800);
+}
+
+export function processRefereeMessage(text: string) {
+	const lobbyName = getLobbyNameFromMakeCommand(text);
+
+	if (lobbyName) {
+		pendingMadeLobbyName = lobbyName;
+	}
+}
+
+function parseStoredMaps(raw: string): QualMap[] {
+	try {
+		const parsed = JSON.parse(raw);
+
+		if (!Array.isArray(parsed)) {
+			return [];
+		}
+
+		return parsed.filter(isQualMap);
+	} catch {
+		return [];
+	}
+}
+
+function parseStoredMappools(raw: string): QualMappool[] {
+	try {
+		const parsed = JSON.parse(raw);
+
+		if (!Array.isArray(parsed)) {
+			return [];
+		}
+
+		return parsed
+			.map((pool) => ({
+				slug: normalizeMappoolSlug(String(pool?.slug ?? "")),
+				raw: String(pool?.raw ?? ""),
+				maps: Array.isArray(pool?.maps) ? pool.maps.filter(isQualMap) : [],
+			}))
+			.filter((pool) => pool.slug && pool.maps.length);
+	} catch {
+		return [];
+	}
+}
+
+function isQualMap(map: any): map is QualMap {
+	return (
+		typeof map?.label === "string" &&
+		typeof map?.id === "string" &&
+		typeof map?.mod === "string"
+	);
+}
+
+function setQualLobbyName(channelId: number, lobbyName: string) {
+	const normalizedLobbyName = cleanIrcMessage(lobbyName).trim();
+
+	if (!normalizedLobbyName) {
+		return;
+	}
+
+	qualLobbyNames.value = {
+		...qualLobbyNames.value,
+		[channelId]: normalizedLobbyName,
+	};
+
+	if (getQualMappoolForChannel(channelId)) {
+		clearQualMappoolWarning(channelId);
+	}
+}
+
+function setQualMappoolWarning(channelId: number, text: string) {
+	qualMappoolWarnings.value = {
+		...qualMappoolWarnings.value,
+		[channelId]: text,
+	};
+}
+
+function clearQualMappoolWarning(channelId: number) {
+	const {[channelId]: _removed, ...warnings} = qualMappoolWarnings.value;
+	qualMappoolWarnings.value = warnings;
+}
+
+function getLobbyNameFromMakeCommand(text: string): string | null {
+	const match = cleanIrcMessage(text).match(/^!mp\s+make(?:private)?\s+(.+)$/i);
+
+	return match ? match[1].trim() : null;
+}
+
+function getLobbyNameFromSettingsMessage(text: string): string | null {
+	const match = cleanIrcMessage(text).match(/^(?:Room|Match)\s+name:\s*(.+)$/i);
+
+	return match ? match[1].trim() : null;
+}
+
+export function startQuals(channelId: number) {
+	const pool = getQualMappoolForChannel(channelId);
+
+	if (!pool?.maps.length) {
+		setQualMappoolWarning(
+			channelId,
+			'No valid mappool found. Please assign a mappool for this lobby in "Map Pick" button'
+		);
+		return;
+	}
 
 	qualsChannelId = channelId;
-	qualMappool.value = maps;
+	qualMappool.value = pool.maps;
 	qualCurrentMapIdx.value = 0;
 	qualCurrentRun.value = 1;
 	qualEmergencyWho.value = null;
 	qualEmergencyMsg.value = null;
 	qualPausedState.value = null;
+	clearQualMappoolWarning(channelId);
 
 	const emergencyWord = String(store.state.settings.refQualEmergencyWord ?? "");
 	sendQualCmd("Notice: Automation mode is active.");
@@ -134,7 +333,7 @@ function setNextMap() {
 		return;
 	}
 
-	const mod = String(map.mod ?? "").trim();
+	const mod = getQualMapModCommand(map);
 
 	sendQualCmd(`!mp map ${map.id}`);
 	sendQualCmd(`!mp mods ${mod}`.trimEnd());
@@ -260,6 +459,14 @@ export function processBanchoMessage(
 		processQualsMessage(normalizedText);
 
 		return;
+	}
+
+	if (isBanchoBot && channelId !== undefined) {
+		const lobbyName = getLobbyNameFromSettingsMessage(normalizedText);
+
+		if (lobbyName) {
+			setQualLobbyName(channelId, lobbyName);
+		}
 	}
 
 	if (!store.state.settings.refHelperEnabled || !isBanchoBot) {

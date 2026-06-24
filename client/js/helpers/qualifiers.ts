@@ -25,6 +25,33 @@ export function shouldTriggerQualsEmergency(
 	return cleanIrcMessage(text).toLowerCase().includes(normalizedEmergencyWord);
 }
 
+export function normalizeMappoolSlug(slug: string): string {
+	return slug.trim().replace(/\s+/g, "").toUpperCase();
+}
+
+export function buildMappoolModCommand(mod: string, addNoFail: boolean): string {
+	const trimmed = mod.trim();
+
+	if (!addNoFail) {
+		return trimmed;
+	}
+
+	const tokens = trimmed.split(/\s+/).filter(Boolean);
+	const normalizedTokens = tokens.map((token) => token.toLowerCase());
+
+	if (normalizedTokens.includes("freemod") || normalizedTokens.includes("nf")) {
+		return trimmed;
+	}
+
+	return [...tokens, "nf"].join(" ");
+}
+
+export function getMappoolSlugFromLobbyName(lobbyName: string): string | null {
+	const match = cleanIrcMessage(lobbyName).match(/^\s*([A-Za-z0-9_-]+)\s*:/);
+
+	return match ? normalizeMappoolSlug(match[1]) : null;
+}
+
 export function getNextQualCursor(
 	currentMapIndex: number,
 	currentRun: number,
