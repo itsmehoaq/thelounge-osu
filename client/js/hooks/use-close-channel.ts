@@ -29,11 +29,16 @@ export default function useCloseChannel(channel: ClientChan) {
 			return;
 		}
 
-		channel.closed = true;
+		const forceClose = /^#mp_/i.test(channel.name);
+
+		if (!forceClose) {
+			channel.closed = true;
+		}
 
 		socket.emit("input", {
 			target: Number(channel.id),
 			text: "/close",
+			forceClose,
 		});
 	};
 }

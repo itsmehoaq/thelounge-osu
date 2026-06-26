@@ -525,6 +525,18 @@ function initializeClient(
 
 	socket.on("input", (data) => {
 		if (_.isPlainObject(data)) {
+			if (data.forceClose === true && typeof data.target === "number") {
+				const targetNetChan = client.find(data.target);
+
+				if (
+					targetNetChan &&
+					targetNetChan.chan.type === ChanType.CHANNEL &&
+					/^#mp_/i.test(targetNetChan.chan.name)
+				) {
+					client.forceRemoveOnPartChannelIds.add(targetNetChan.chan.id);
+				}
+			}
+
 			client.input(data);
 		}
 	});

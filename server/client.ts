@@ -21,7 +21,7 @@ import ClientManager from "./clientManager";
 import {MessageStorage} from "./plugins/messageStorage/types";
 import {StorageCleaner} from "./storageCleaner";
 import {SearchQuery, SearchResponse} from "../shared/types/storage";
-import {SharedChan, ChanType} from "../shared/types/chan";
+import {SharedChan, ChanState, ChanType} from "../shared/types/chan";
 import {SharedNetwork} from "../shared/types/network";
 import {ServerToClientEvents} from "../shared/types/socket-events";
 
@@ -102,6 +102,7 @@ class Client {
 	highlightRegex!: RegExp | null;
 	highlightExceptionRegex!: RegExp | null;
 	messageProvider?: SqliteMessageStorage;
+	forceRemoveOnPartChannelIds!: Set<number>;
 
 	fileHash!: string;
 
@@ -122,6 +123,7 @@ class Client {
 			highlightRegex: null,
 			highlightExceptionRegex: null,
 			messageProvider: undefined,
+			forceRemoveOnPartChannelIds: new Set<number>(),
 		});
 
 		const client = this;
@@ -753,12 +755,20 @@ class Client {
 	part(network: Network, chan: Chan) {
 		const client = this;
 
-		if (/^#mp_/i.test(chan.name)) {
-			client.emit("chatlog:data", {
-				target: chan.id,
-				channelName: chan.name,
-				messages: chan.messages,
+		const shouldForceRemove = client.forceRemoveOnPartChannelIds.delete(chan.id);
+
+		if (chan.type === ChanType.CHANNEL && /^#mp_/i.test(chan.name) && !shouldForceRemove) {
+			chan.users = new Map();
+			chan.state = ChanState.PARTED;
+			client.save();
+			client.emit("channel:state", {
+				chan: chan.id,
+				state: chan.state,
 			});
+			client.emit("users", {
+				chan: chan.id,
+			});
+			return;
 		}
 
 		network.channels = _.without(network.channels, chan);
