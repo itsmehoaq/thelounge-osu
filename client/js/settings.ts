@@ -180,6 +180,9 @@ const defaultConfig = {
 	refQualTotalRuns: {
 		default: "1",
 	},
+	refQualTeamSize: {
+		default: "4",
+	},
 	refQualMappool: {
 		default: "",
 		sync: "never",

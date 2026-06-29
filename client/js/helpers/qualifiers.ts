@@ -1,9 +1,16 @@
 import {cleanIrcMessage} from "../../../shared/irc";
 
-export type QualsMessageEvent = "ready" | "finished";
+export type QualsMessageEvent = "ready" | "finished" | "player_change";
 export type QualCursor = {
 	mapIndex: number;
 	run: number;
+};
+export type QualSettingsSlot = {
+	ready: boolean;
+};
+export type QualSettingsSnapshot = {
+	reportedPlayers: number | null;
+	slots: QualSettingsSlot[];
 };
 
 export function isBanchoBotNick(nick: string): boolean {
@@ -46,6 +53,59 @@ export function buildMappoolModCommand(mod: string, addNoFail: boolean): string 
 	return [...tokens, "nf"].join(" ");
 }
 
+export function createQualSettingsSnapshot(): QualSettingsSnapshot {
+	return {
+		reportedPlayers: null,
+		slots: [],
+	};
+}
+
+export function applyQualSettingsLine(
+	snapshot: QualSettingsSnapshot,
+	text: string
+): QualSettingsSnapshot {
+	const normalizedText = cleanIrcMessage(text).replace(/\s+/g, " ").trim();
+	const playersMatch = normalizedText.match(/^Players:\s*(\d+)/i);
+
+	if (playersMatch) {
+		return {
+			...snapshot,
+			reportedPlayers: Number(playersMatch[1]),
+			slots: [],
+		};
+	}
+
+	const slotMatch = normalizedText.match(/^Slot\s+\d+\s+(Not Ready|Ready)\b/i);
+
+	if (slotMatch) {
+		return {
+			...snapshot,
+			slots: [
+				...snapshot.slots,
+				{
+					ready: slotMatch[1].toLowerCase() === "ready",
+				},
+			],
+		};
+	}
+
+	return snapshot;
+}
+
+export function isQualSettingsSnapshotComplete(snapshot: QualSettingsSnapshot): boolean {
+	return (
+		snapshot.reportedPlayers !== null &&
+		snapshot.reportedPlayers >= 0 &&
+		snapshot.slots.length >= snapshot.reportedPlayers
+	);
+}
+
+export function getExpectedQualPlayerCount(teamSize: number): number {
+	const normalizedTeamSize = Math.max(1, Math.floor(teamSize) || 1);
+
+	return normalizedTeamSize;
+}
+
 export function getMappoolSlugFromLobbyName(lobbyName: string): string | null {
 	const match = cleanIrcMessage(lobbyName).match(/^\s*([A-Za-z0-9_-]+)\s*:/);
 
@@ -86,6 +146,10 @@ export function getQualsMessageEvent(text: string): QualsMessageEvent | null {
 
 	if (/The match has finished/i.test(normalizedText)) {
 		return "finished";
+	}
+
+	if (/\b(?:joined in slot|left the game|moved to slot)\b/i.test(normalizedText)) {
+		return "player_change";
 	}
 
 	return null;

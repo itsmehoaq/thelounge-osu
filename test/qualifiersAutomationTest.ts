@@ -1,9 +1,13 @@
 import {expect} from "chai";
 import {
+	applyQualSettingsLine,
 	buildMappoolModCommand,
+	createQualSettingsSnapshot,
+	getExpectedQualPlayerCount,
 	getMappoolSlugFromLobbyName,
 	getNextQualCursor,
 	getQualsMessageEvent,
+	isQualSettingsSnapshotComplete,
 	isBanchoBotNick,
 	shouldTriggerQualsEmergency,
 } from "../client/js/helpers/qualifiers";
@@ -20,6 +24,12 @@ describe("qualifiers automation message detection", function () {
 	it("detects countdown completion and match completion", function () {
 		expect(getQualsMessageEvent("Countdown finished")).to.equal("ready");
 		expect(getQualsMessageEvent("The match has finished!")).to.equal("finished");
+	});
+
+	it("detects player changes that should re-check mp settings", function () {
+		expect(getQualsMessageEvent("PlayerA left the game.")).to.equal("player_change");
+		expect(getQualsMessageEvent("PlayerA joined in slot 3.")).to.equal("player_change");
+		expect(getQualsMessageEvent("PlayerA moved to slot 2")).to.equal("player_change");
 	});
 
 	it("ignores unrelated BanchoBot messages", function () {
@@ -65,5 +75,27 @@ describe("qualifiers automation message detection", function () {
 		expect(getMappoolSlugFromLobbyName("ABC: (Team A) vs (Team B)")).to.equal("ABC");
 		expect(getMappoolSlugFromLobbyName("abc-1 : Team A vs Team B")).to.equal("ABC-1");
 		expect(getMappoolSlugFromLobbyName("(Team A) vs (Team B)")).to.equal(null);
+	});
+
+	it("parses mp settings player readiness", function () {
+		let snapshot = createQualSettingsSnapshot();
+
+		for (const line of [
+			"Players: 3",
+			"Slot 1  Ready     https://osu.ppy.sh/u/1 PlayerA",
+			"Slot 2  Ready     https://osu.ppy.sh/u/2 PlayerB",
+			"Slot 3  Not Ready https://osu.ppy.sh/u/3 PlayerC",
+		]) {
+			snapshot = applyQualSettingsLine(snapshot, line);
+		}
+
+		expect(isQualSettingsSnapshotComplete(snapshot)).to.equal(true);
+		expect(snapshot.reportedPlayers).to.equal(3);
+		expect(snapshot.slots.map((slot) => slot.ready)).to.deep.equal([true, true, false]);
+	});
+
+	it("uses exact head-to-head player count for qualifier readiness", function () {
+		expect(getExpectedQualPlayerCount(9)).to.equal(9);
+		expect(getExpectedQualPlayerCount(4)).to.equal(4);
 	});
 });

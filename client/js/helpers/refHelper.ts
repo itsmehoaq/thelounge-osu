@@ -4,12 +4,17 @@ import {getOsuToken, fetchOsuMatch} from "./osuApi";
 import socket from "../socket";
 import {cleanIrcMessage} from "../../../shared/irc";
 import {
+	applyQualSettingsLine,
 	buildMappoolModCommand,
+	createQualSettingsSnapshot,
+	getExpectedQualPlayerCount,
 	getMappoolSlugFromLobbyName,
 	getNextQualCursor,
 	getQualsMessageEvent,
 	isBanchoBotNick,
+	isQualSettingsSnapshotComplete,
 	normalizeMappoolSlug,
+	type QualSettingsSnapshot,
 	shouldTriggerQualsEmergency,
 } from "./qualifiers";
 
@@ -29,13 +34,13 @@ export function clearWinnerHint() {
 
 type QualState =
 	| "idle"
-	| "setting_map"
-	| "verifying"
 	| "waiting_ready"
+	| "checking_ready"
+	| "starting"
 	| "running"
-	| "done"
-	| "emergency";
-type ResumableQualState = Exclude<QualState, "idle" | "done" | "emergency">;
+	| "paused"
+	| "done";
+type ResumableQualState = Exclude<QualState, "idle" | "done" | "paused">;
 
 export interface QualMap {
 	label: string;
@@ -59,10 +64,15 @@ export const qualPausedState = ref<ResumableQualState | null>(null);
 export const qualLobbyNames = ref<Record<number, string>>({});
 export const qualChannelMappoolSlugs = ref<Record<number, string>>({});
 export const qualMappoolWarnings = ref<Record<number, string>>({});
+export const qualRefAlert = ref<string | null>(null);
 
 let qualsChannelId: number | null = null;
 let pendingMadeLobbyName: string | null = null;
 const requestedLobbySettingsChannels = new Set<number>();
+let qualSettingsSnapshot: QualSettingsSnapshot = createQualSettingsSnapshot();
+let qualStartTimeout: ReturnType<typeof setTimeout> | null = null;
+let qualReadyCheckTimeout: ReturnType<typeof setTimeout> | null = null;
+let qualReadyCheckPending = false;
 
 const MOD_MAP: Record<string, string> = {
 	NM: "",
@@ -290,6 +300,9 @@ export function startQuals(channelId: number) {
 	qualEmergencyWho.value = null;
 	qualEmergencyMsg.value = null;
 	qualPausedState.value = null;
+	qualRefAlert.value = null;
+	clearQualStartTimeout();
+	clearQualReadyCheckTimeout();
 	clearQualMappoolWarning(channelId);
 
 	const emergencyWord = String(store.state.settings.refQualEmergencyWord ?? "");
@@ -301,29 +314,45 @@ export function startQuals(channelId: number) {
 	setNextMap();
 }
 
-export function abortQuals() {
-	qualState.value = "idle";
-	qualsChannelId = null;
-	qualEmergencyWho.value = null;
-	qualEmergencyMsg.value = null;
-	qualPausedState.value = null;
+export function pauseQuals(message?: string | Event) {
+	if (!isResumableQualState(qualState.value)) {
+		return;
+	}
+
+	qualPausedState.value = qualState.value;
+	qualState.value = "paused";
+	clearQualStartTimeout();
+	clearQualReadyCheckTimeout();
+	qualSettingsSnapshot = createQualSettingsSnapshot();
+
+	if (typeof message === "string" && message.trim()) {
+		setQualRefAlert(message);
+	}
 }
 
-export function resumeQualsCurrentMap() {
+export function resumeQuals() {
+	if (qualState.value !== "paused") {
+		return;
+	}
+
 	const resumeState = qualPausedState.value;
 
 	qualEmergencyWho.value = null;
 	qualEmergencyMsg.value = null;
 	qualPausedState.value = null;
-	qualState.value =
-		resumeState ?? (qualMappool.value[qualCurrentMapIdx.value] ? "waiting_ready" : "idle");
-}
+	qualRefAlert.value = null;
 
-export function resumeQualsNextMap() {
-	qualEmergencyWho.value = null;
-	qualEmergencyMsg.value = null;
-	qualPausedState.value = null;
-	advanceQuals();
+	if (!qualMappool.value[qualCurrentMapIdx.value]) {
+		qualState.value = "idle";
+		return;
+	}
+
+	if (resumeState === "checking_ready" || resumeState === "starting") {
+		requestQualReadyCheck();
+		return;
+	}
+
+	qualState.value = resumeState ?? "waiting_ready";
 }
 
 function setNextMap() {
@@ -335,6 +364,9 @@ function setNextMap() {
 
 	const mod = getQualMapModCommand(map);
 
+	clearQualStartTimeout();
+	clearQualReadyCheckTimeout();
+	qualRefAlert.value = null;
 	sendQualCmd(`!mp map ${map.id}`);
 	sendQualCmd(`!mp mods ${mod}`.trimEnd());
 	sendQualCmd(`!mp timer ${Number(store.state.settings.refTimerDefault) || 120}`);
@@ -349,8 +381,63 @@ function sendQualCmd(cmd: string) {
 function sendQualStart() {
 	const startTimer = Number(store.state.settings.refStartTimer);
 
+	clearQualStartTimeout();
+	qualRefAlert.value = null;
 	qualState.value = "running";
 	sendQualCmd(startTimer > 0 ? `!mp start ${startTimer}` : "!mp start");
+}
+
+function scheduleQualStart() {
+	clearQualStartTimeout();
+	qualState.value = "starting";
+	qualStartTimeout = setTimeout(() => {
+		sendQualStart();
+	}, 350);
+}
+
+function clearQualStartTimeout() {
+	if (qualStartTimeout) {
+		clearTimeout(qualStartTimeout);
+		qualStartTimeout = null;
+	}
+}
+
+function clearQualReadyCheckTimeout() {
+	if (qualReadyCheckTimeout) {
+		clearTimeout(qualReadyCheckTimeout);
+		qualReadyCheckTimeout = null;
+	}
+
+	qualReadyCheckPending = false;
+}
+
+function requestQualReadyCheck(delay = 0) {
+	if (qualsChannelId === null) {
+		return;
+	}
+
+	clearQualStartTimeout();
+	clearQualReadyCheckTimeout();
+	qualState.value = "checking_ready";
+	qualSettingsSnapshot = createQualSettingsSnapshot();
+
+	const sendCheck = () => {
+		qualReadyCheckTimeout = null;
+		qualReadyCheckPending = false;
+		sendQualCmd("!mp settings");
+	};
+
+	if (delay > 0) {
+		qualReadyCheckPending = true;
+		qualReadyCheckTimeout = setTimeout(sendCheck, delay);
+		return;
+	}
+
+	sendCheck();
+}
+
+function setQualRefAlert(message: string) {
+	qualRefAlert.value = message;
 }
 
 function playEmergencyBeeps() {
@@ -365,13 +452,9 @@ function playEmergencyBeeps() {
 }
 
 function triggerEmergency(nick: string, text: string) {
-	if (isResumableQualState(qualState.value)) {
-		qualPausedState.value = qualState.value;
-	}
-
-	qualState.value = "emergency";
 	qualEmergencyWho.value = nick;
 	qualEmergencyMsg.value = text;
+	pauseQuals(`Automation paused by ${nick}: ${text}`);
 
 	playEmergencyBeeps();
 
@@ -387,16 +470,84 @@ function triggerEmergency(nick: string, text: string) {
 }
 
 function isResumableQualState(state: QualState): state is ResumableQualState {
-	return state !== "idle" && state !== "done" && state !== "emergency";
+	return state !== "idle" && state !== "done" && state !== "paused";
+}
+
+function getQualTeamSizeSetting() {
+	return (
+		Number(store.state.settings.refQualTeamSize) ||
+		Number(store.state.settings.refTeamSize) ||
+		1
+	);
+}
+
+function resetQualSettingsSnapshotIfNeeded(text: string) {
+	if (/^(?:Room|Match)\s+name:\s*/i.test(cleanIrcMessage(text).trim())) {
+		qualSettingsSnapshot = createQualSettingsSnapshot();
+	}
+}
+
+function processQualSettingsLine(text: string) {
+	if (qualState.value !== "checking_ready") {
+		return;
+	}
+
+	if (qualReadyCheckPending) {
+		return;
+	}
+
+	resetQualSettingsSnapshotIfNeeded(text);
+	qualSettingsSnapshot = applyQualSettingsLine(qualSettingsSnapshot, text);
+
+	if (!isQualSettingsSnapshotComplete(qualSettingsSnapshot)) {
+		return;
+	}
+
+	const expectedPlayers = getExpectedQualPlayerCount(getQualTeamSizeSetting());
+	const reportedPlayers = qualSettingsSnapshot.reportedPlayers ?? 0;
+	const listedPlayers = qualSettingsSnapshot.slots.length;
+
+	if (reportedPlayers !== expectedPlayers || listedPlayers !== expectedPlayers) {
+		setQualRefAlert(
+			`Invalid player count: expected ${expectedPlayers}, found ${listedPlayers}. Check again.`
+		);
+		qualState.value = "waiting_ready";
+		qualSettingsSnapshot = createQualSettingsSnapshot();
+		return;
+	}
+
+	if (!qualSettingsSnapshot.slots.every((slot) => slot.ready)) {
+		qualState.value = "waiting_ready";
+		qualSettingsSnapshot = createQualSettingsSnapshot();
+		return;
+	}
+
+	qualSettingsSnapshot = createQualSettingsSnapshot();
+	scheduleQualStart();
+}
+
+function handleQualPlayerChange() {
+	if (qualState.value === "checking_ready" || qualState.value === "starting") {
+		requestQualReadyCheck(350);
+	}
 }
 
 function processQualsMessage(text: string) {
 	const event = getQualsMessageEvent(text);
 
+	if (qualState.value === "checking_ready") {
+		processQualSettingsLine(text);
+	}
+
+	if (event === "player_change") {
+		handleQualPlayerChange();
+		return;
+	}
+
 	switch (qualState.value) {
 		case "waiting_ready":
 			if (event === "ready") {
-				sendQualStart();
+				requestQualReadyCheck();
 			}
 
 			break;
@@ -439,10 +590,18 @@ export function processBanchoMessage(
 	isSelf = false
 ) {
 	const qualsActive =
-		qualState.value !== "idle" && qualState.value !== "done" && qualState.value !== "emergency";
+		qualState.value !== "idle" && qualState.value !== "done" && qualState.value !== "paused";
 	const isBanchoBot = isBanchoBotNick(nick);
 	const normalizedText = cleanIrcMessage(text);
 	const isQualsChannel = channelId === undefined || channelId === qualsChannelId;
+
+	if (isBanchoBot && channelId !== undefined) {
+		const lobbyName = getLobbyNameFromSettingsMessage(normalizedText);
+
+		if (lobbyName) {
+			setQualLobbyName(channelId, lobbyName);
+		}
+	}
 
 	// Emergency word — any player, any message
 	if (qualsActive && isQualsChannel && !isBanchoBot) {
@@ -459,14 +618,6 @@ export function processBanchoMessage(
 		processQualsMessage(normalizedText);
 
 		return;
-	}
-
-	if (isBanchoBot && channelId !== undefined) {
-		const lobbyName = getLobbyNameFromSettingsMessage(normalizedText);
-
-		if (lobbyName) {
-			setQualLobbyName(channelId, lobbyName);
-		}
 	}
 
 	if (!store.state.settings.refHelperEnabled || !isBanchoBot) {

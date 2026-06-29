@@ -1,15 +1,22 @@
 <template>
-	<!-- Emergency stop banner -->
-	<div v-if="qualState === 'emergency'" class="qa-emergency-banner">
+	<!-- Quals pause / ref-only alert banner -->
+	<div
+		v-if="isVisible && qualState === 'paused' && (qualEmergencyMsg || qualRefAlert)"
+		class="qa-emergency-banner qa-alert-flash"
+	>
 		<span class="qa-emergency-icon">!</span>
 		<span class="qa-emergency-text">
-			<strong>EMERGENCY STOP</strong> &mdash;
-			<span class="qa-emergency-who">{{ qualEmergencyWho }}</span
-			>:
-			{{ qualEmergencyMsg }}
+			<strong>AUTO PAUSED</strong>
+			<template v-if="qualEmergencyMsg">
+				&mdash;
+				<span class="qa-emergency-who">{{ qualEmergencyWho }}</span
+				>:
+				{{ qualEmergencyMsg }}
+			</template>
+			<template v-else> &mdash; {{ qualRefAlert }} </template>
 		</span>
 		<div class="qa-emergency-actions">
-			<button class="qa-btn qa-danger" @click="abortQuals">Abort Quals</button>
+			<button class="qa-btn qa-quals-resume" @click="resumeQuals">Resume</button>
 		</div>
 	</div>
 
@@ -32,6 +39,12 @@
 	</div>
 	<div v-if="isVisible && mappoolWarning" class="qa-mappool-warning">
 		{{ mappoolWarning }}
+	</div>
+	<div
+		v-if="isVisible && qualRefAlert && qualState !== 'paused'"
+		class="qa-mappool-warning qa-alert-flash"
+	>
+		{{ qualRefAlert }}
 	</div>
 	<div v-if="isVisible" id="osu-quick-actions">
 		<button
@@ -102,24 +115,24 @@
 				<span class="qa-label">Quals</span>
 			</button>
 			<button
-				v-else-if="qualState !== 'emergency'"
-				class="qa-btn qa-danger"
-				:disabled="!store.state.isConnected"
-				title="Abort Qualifiers"
-				@click="abortQuals"
-			>
-				<Square :size="12" />
-				<span class="qa-label">Abort Quals</span>
-			</button>
-			<button
-				v-else
+				v-else-if="qualState === 'paused'"
 				class="qa-btn qa-quals-resume"
 				:disabled="!store.state.isConnected"
-				title="Resume paused qualifiers automation"
-				@click="openResumePicker"
+				title="Resume qualifiers automation"
+				@click="resumeQuals"
 			>
 				<Play :size="12" />
 				<span class="qa-label">Resume</span>
+			</button>
+			<button
+				v-else
+				class="qa-btn qa-quals-pause"
+				:disabled="!store.state.isConnected"
+				title="Pause qualifiers automation"
+				@click="pauseQuals()"
+			>
+				<Pause :size="12" />
+				<span class="qa-label">Pause Auto</span>
 			</button>
 		</template>
 
@@ -194,46 +207,6 @@
 			</div>
 		</div>
 	</div>
-
-	<div
-		v-if="isVisible && resumePickerOpen && qualState === 'emergency'"
-		class="qa-pool-modal-backdrop"
-		@click.self="closeResumePicker"
-	>
-		<div
-			class="qa-pool-modal qa-resume-modal"
-			role="dialog"
-			aria-modal="true"
-			aria-label="Resume qualifiers"
-		>
-			<div class="qa-pool-modal-head">
-				<span class="qa-pool-title">Resume Quals</span>
-				<button
-					type="button"
-					class="qa-pool-close"
-					aria-label="Close"
-					@click="closeResumePicker"
-				>
-					x
-				</button>
-			</div>
-			<div class="qa-resume-options">
-				<button type="button" class="qa-resume-option" @click="resumeCurrentQuals">
-					<span class="qa-resume-option-title">Resume current map</span>
-					<span class="qa-resume-option-detail">{{ currentResumeDetail }}</span>
-				</button>
-				<button
-					type="button"
-					class="qa-resume-option"
-					:disabled="!nextResumeMap"
-					@click="resumeNextQuals"
-				>
-					<span class="qa-resume-option-title">Start next map</span>
-					<span class="qa-resume-option-detail">{{ nextResumeDetail }}</span>
-				</button>
-			</div>
-		</div>
-	</div>
 </template>
 
 <script lang="ts">
@@ -252,28 +225,27 @@ import {
 	qualCurrentMapIdx,
 	qualCurrentRun,
 	qualMappool,
-	qualPausedState,
 	qualLobbyNames,
 	qualChannelMappoolSlugs,
 	qualMappoolWarnings,
 	qualEmergencyWho,
 	qualEmergencyMsg,
+	qualRefAlert,
 	startQuals,
-	abortQuals,
+	pauseQuals,
+	resumeQuals,
 	assignQualMappoolToChannel,
 	findQualMappoolBySlug,
 	getQualMapModCommand,
 	readQualMappools,
-	resumeQualsCurrentMap,
-	resumeQualsNextMap,
 	type QualMap,
 } from "../js/helpers/refHelper";
-import {Settings, Clock, Play, Square, MapPinned, Download} from "lucide-vue-next";
-import {getMappoolSlugFromLobbyName, getNextQualCursor} from "../js/helpers/qualifiers";
+import {Settings, Clock, Play, Square, MapPinned, Download, Pause} from "lucide-vue-next";
+import {getMappoolSlugFromLobbyName} from "../js/helpers/qualifiers";
 
 export default defineComponent({
 	name: "OsuQuickActions",
-	components: {Settings, Clock, Play, Square, MapPinned, Download},
+	components: {Settings, Clock, Play, Square, MapPinned, Download, Pause},
 	props: {
 		network: {type: Object as PropType<ClientNetwork>, required: true},
 		channel: {type: Object as PropType<ClientChan>, required: true},
@@ -281,7 +253,6 @@ export default defineComponent({
 	setup(props) {
 		const store = useStore();
 		const poolPickerOpen = ref(false);
-		const resumePickerOpen = ref(false);
 
 		const isVisible = computed(() => /^#mp_/i.test(props.channel.name));
 
@@ -299,18 +270,6 @@ export default defineComponent({
 
 		const closePoolPicker = () => {
 			poolPickerOpen.value = false;
-		};
-
-		const openResumePicker = () => {
-			if (!store.state.isConnected) {
-				return;
-			}
-
-			resumePickerOpen.value = true;
-		};
-
-		const closeResumePicker = () => {
-			resumePickerOpen.value = false;
 		};
 
 		const sendSettings = () => send("!mp settings");
@@ -361,10 +320,7 @@ export default defineComponent({
 		};
 
 		const qualsRunning = computed(
-			() =>
-				qualState.value !== "idle" &&
-				qualState.value !== "done" &&
-				qualState.value !== "emergency"
+			() => qualState.value !== "idle" && qualState.value !== "done"
 		);
 
 		const currentQualMap = computed(() => qualMappool.value[qualCurrentMapIdx.value]);
@@ -438,90 +394,18 @@ export default defineComponent({
 			assignQualMappoolToChannel(props.channel.id, target.value);
 		};
 
-		const nextResumeCursor = computed(() =>
-			getNextQualCursor(
-				qualCurrentMapIdx.value,
-				qualCurrentRun.value,
-				qualMappool.value.length,
-				qualTotalRuns.value
-			)
-		);
-
-		const nextResumeMap = computed(() => {
-			const cursor = nextResumeCursor.value;
-
-			return cursor ? qualMappool.value[cursor.mapIndex] : undefined;
-		});
-
-		const getResumeMapDetail = (map: QualMap | undefined, run: number, fallback: string) => {
-			if (!map) {
-				return fallback;
-			}
-
-			return `${map.label} - ${map.id} - ${getMapModLabel(map)} - Run ${run}/${
-				qualTotalRuns.value
-			}`;
-		};
-
-		const pausedStateLabel = computed(() => {
-			switch (qualPausedState.value) {
-				case "waiting_ready":
-					return "waiting for players";
-				case "running":
-					return "waiting for match finish";
-				case "setting_map":
-					return "setting map";
-				case "verifying":
-					return "verifying map";
-				default:
-					return "paused";
-			}
-		});
-
-		const currentResumeDetail = computed(() => {
-			const detail = getResumeMapDetail(
-				currentQualMap.value,
-				qualCurrentRun.value,
-				"No current map"
-			);
-
-			return `${detail} - ${pausedStateLabel.value}`;
-		});
-
-		const nextResumeDetail = computed(() => {
-			const cursor = nextResumeCursor.value;
-
-			if (!cursor) {
-				return "No next map in pool order";
-			}
-
-			return getResumeMapDetail(nextResumeMap.value, cursor.run, "No next map");
-		});
-
-		const resumeCurrentQuals = () => {
-			resumeQualsCurrentMap();
-			closeResumePicker();
-		};
-
-		const resumeNextQuals = () => {
-			if (!nextResumeMap.value) {
-				return;
-			}
-
-			resumeQualsNextMap();
-			closeResumePicker();
-		};
-
 		const qualStateLabel = computed(() => {
 			switch (qualState.value) {
-				case "setting_map":
-					return "Setting map…";
-				case "verifying":
-					return "Verifying…";
 				case "waiting_ready":
 					return "Waiting for players";
+				case "checking_ready":
+					return "Checking players";
+				case "starting":
+					return "Starting";
 				case "running":
 					return "Map running";
+				case "paused":
+					return "Paused";
 				case "done":
 					return "Done";
 				default:
@@ -533,7 +417,6 @@ export default defineComponent({
 			store,
 			isVisible,
 			poolPickerOpen,
-			resumePickerOpen,
 			availableMappools,
 			activePoolSlug,
 			activeMappool,
@@ -547,27 +430,21 @@ export default defineComponent({
 			qualCurrentMapIdx,
 			qualCurrentRun,
 			qualMappool,
-			qualPausedState,
 			qualEmergencyWho,
 			qualEmergencyMsg,
+			qualRefAlert,
 			startQuals,
-			abortQuals,
-			resumeCurrentQuals,
-			resumeNextQuals,
+			pauseQuals,
+			resumeQuals,
 			parsedMappool,
 			groupedMappool,
 			qualsRunning,
 			currentQualMap,
-			nextResumeMap,
 			qualTotalRuns,
 			qualStateLabel,
 			openPoolPicker,
 			closePoolPicker,
 			selectPoolForChannel,
-			openResumePicker,
-			closeResumePicker,
-			currentResumeDetail,
-			nextResumeDetail,
 			pickMap,
 			getMapPickTitle,
 			getMapModLabel,
@@ -659,17 +536,19 @@ export default defineComponent({
 .qa-pool-modal-backdrop {
 	position: fixed;
 	inset: 0;
-	z-index: 30;
+	z-index: 1200;
 	display: flex;
-	align-items: flex-end;
+	align-items: center;
 	justify-content: center;
-	padding: 24px 12px 48px;
+	padding: 16px 12px max(16px, env(safe-area-inset-bottom));
 	background: rgba(0, 0, 0, 0.32);
 }
 
 .qa-pool-modal {
+	display: flex;
+	flex-direction: column;
 	width: min(680px, calc(100vw - 24px));
-	max-height: min(520px, 60vh);
+	max-height: min(620px, calc(100vh - 96px));
 	overflow: hidden;
 	background: var(--window-bg-color);
 	border: 1px solid #2a2a40;
@@ -679,6 +558,7 @@ export default defineComponent({
 
 .qa-pool-modal-head {
 	display: flex;
+	flex: 0 0 auto;
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
@@ -724,8 +604,22 @@ export default defineComponent({
 	font-size: 12px;
 }
 
+.qa-alert-flash {
+	animation: qa-alert-flash 0.55s ease-in-out infinite alternate;
+}
+
+@keyframes qa-alert-flash {
+	from {
+		filter: brightness(1);
+	}
+	to {
+		filter: brightness(1.35);
+	}
+}
+
 .qa-pool-selector {
 	display: flex;
+	flex: 0 0 auto;
 	align-items: center;
 	gap: 8px;
 	padding: 10px 12px 0;
@@ -751,6 +645,7 @@ export default defineComponent({
 }
 
 .qa-pool-empty {
+	overflow: auto;
 	padding: 12px;
 	color: #ffc266;
 	font-family: monospace;
@@ -758,9 +653,12 @@ export default defineComponent({
 }
 
 .qa-pool-groups {
-	max-height: calc(min(520px, 60vh) - 45px);
-	overflow: auto;
-	padding: 10px;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding: 10px 10px 24px;
+	scroll-padding-bottom: 24px;
 }
 
 .qa-pool-group + .qa-pool-group {
