@@ -7,7 +7,6 @@ import {
 	applyQualSettingsLine,
 	buildMappoolModCommand,
 	createQualSettingsSnapshot,
-	getExpectedQualPlayerCount,
 	getMappoolSlugFromLobbyName,
 	getNextQualCursor,
 	getQualsMessageEvent,
@@ -54,25 +53,43 @@ export interface QualMappool {
 	maps: QualMap[];
 }
 
-export const qualState = ref<QualState>("idle");
-export const qualCurrentMapIdx = ref(0);
-export const qualCurrentRun = ref(1);
-export const qualMappool = ref<QualMap[]>([]);
-export const qualEmergencyWho = ref<string | null>(null);
-export const qualEmergencyMsg = ref<string | null>(null);
-export const qualPausedState = ref<ResumableQualState | null>(null);
+export interface QualSession {
+	state: QualState;
+	currentMapIdx: number;
+	currentRun: number;
+	mappool: QualMap[];
+	emergencyWho: string | null;
+	emergencyMsg: string | null;
+	pausedState: ResumableQualState | null;
+	refAlert: string | null;
+}
+
 export const qualLobbyNames = ref<Record<number, string>>({});
 export const qualChannelMappoolSlugs = ref<Record<number, string>>({});
 export const qualMappoolWarnings = ref<Record<number, string>>({});
-export const qualRefAlert = ref<string | null>(null);
+export const qualSessions = ref<Record<number, QualSession>>({});
 
-let qualsChannelId: number | null = null;
 let pendingMadeLobbyName: string | null = null;
 const requestedLobbySettingsChannels = new Set<number>();
-let qualSettingsSnapshot: QualSettingsSnapshot = createQualSettingsSnapshot();
-let qualStartTimeout: ReturnType<typeof setTimeout> | null = null;
-let qualReadyCheckTimeout: ReturnType<typeof setTimeout> | null = null;
-let qualReadyCheckPending = false;
+
+type QualRuntime = {
+	settingsSnapshot: QualSettingsSnapshot;
+	startTimeout: ReturnType<typeof setTimeout> | null;
+	readyCheckTimeout: ReturnType<typeof setTimeout> | null;
+	readyCheckPending: boolean;
+};
+
+const emptyQualSession: QualSession = {
+	state: "idle",
+	currentMapIdx: 0,
+	currentRun: 1,
+	mappool: [],
+	emergencyWho: null,
+	emergencyMsg: null,
+	pausedState: null,
+	refAlert: null,
+};
+const qualRuntimes = new Map<number, QualRuntime>();
 
 const MOD_MAP: Record<string, string> = {
 	NM: "",
@@ -270,6 +287,59 @@ function clearQualMappoolWarning(channelId: number) {
 	qualMappoolWarnings.value = warnings;
 }
 
+export function getQualSession(channelId: number): QualSession {
+	return qualSessions.value[channelId] ?? emptyQualSession;
+}
+
+function createQualSession(overrides: Partial<QualSession> = {}): QualSession {
+	return {
+		state: "idle",
+		currentMapIdx: 0,
+		currentRun: 1,
+		mappool: [],
+		emergencyWho: null,
+		emergencyMsg: null,
+		pausedState: null,
+		refAlert: null,
+		...overrides,
+	};
+}
+
+function ensureQualSession(channelId: number): QualSession {
+	const existing = qualSessions.value[channelId];
+
+	if (existing) {
+		return existing;
+	}
+
+	const session = createQualSession();
+
+	qualSessions.value = {
+		...qualSessions.value,
+		[channelId]: session,
+	};
+
+	return session;
+}
+
+function getQualRuntime(channelId: number): QualRuntime {
+	let runtime = qualRuntimes.get(channelId);
+
+	if (runtime) {
+		return runtime;
+	}
+
+	runtime = {
+		settingsSnapshot: createQualSettingsSnapshot(),
+		startTimeout: null,
+		readyCheckTimeout: null,
+		readyCheckPending: false,
+	};
+	qualRuntimes.set(channelId, runtime);
+
+	return runtime;
+}
+
 function getLobbyNameFromMakeCommand(text: string): string | null {
 	const match = cleanIrcMessage(text).match(/^!mp\s+make(?:private)?\s+(.+)$/i);
 
@@ -293,151 +363,171 @@ export function startQuals(channelId: number) {
 		return;
 	}
 
-	qualsChannelId = channelId;
-	qualMappool.value = pool.maps;
-	qualCurrentMapIdx.value = 0;
-	qualCurrentRun.value = 1;
-	qualEmergencyWho.value = null;
-	qualEmergencyMsg.value = null;
-	qualPausedState.value = null;
-	qualRefAlert.value = null;
-	clearQualStartTimeout();
-	clearQualReadyCheckTimeout();
+	clearQualStartTimeout(channelId);
+	clearQualReadyCheckTimeout(channelId);
+	getQualRuntime(channelId).settingsSnapshot = createQualSettingsSnapshot();
+	Object.assign(
+		ensureQualSession(channelId),
+		createQualSession({
+			mappool: pool.maps,
+		})
+	);
 	clearQualMappoolWarning(channelId);
 
 	const emergencyWord = String(store.state.settings.refQualEmergencyWord ?? "");
-	sendQualCmd("Notice: Automation mode is active.");
+	sendQualCmd(channelId, "Notice: Automation mode is active.");
 	sendQualCmd(
+		channelId,
 		`In case of players requiring support, please send "${emergencyWord}" in chat to stop and wait for ref`
 	);
 
-	setNextMap();
+	setNextMap(channelId);
 }
 
-export function pauseQuals(message?: string | Event) {
-	if (!isResumableQualState(qualState.value)) {
+export function pauseQuals(channelId: number, message?: string | Event) {
+	const session = getQualSession(channelId);
+
+	if (!isResumableQualState(session.state)) {
 		return;
 	}
 
-	qualPausedState.value = qualState.value;
-	qualState.value = "paused";
-	clearQualStartTimeout();
-	clearQualReadyCheckTimeout();
-	qualSettingsSnapshot = createQualSettingsSnapshot();
+	session.pausedState = session.state;
+	session.state = "paused";
+	clearQualStartTimeout(channelId);
+	clearQualReadyCheckTimeout(channelId);
+	getQualRuntime(channelId).settingsSnapshot = createQualSettingsSnapshot();
 
 	if (typeof message === "string" && message.trim()) {
-		setQualRefAlert(message);
+		setQualRefAlert(channelId, message);
+	} else {
+		session.refAlert = null;
 	}
 }
 
-export function resumeQuals() {
-	if (qualState.value !== "paused") {
+export function resumeQuals(channelId: number) {
+	const session = getQualSession(channelId);
+
+	if (session.state !== "paused") {
 		return;
 	}
 
-	const resumeState = qualPausedState.value;
+	const resumeState = session.pausedState;
 
-	qualEmergencyWho.value = null;
-	qualEmergencyMsg.value = null;
-	qualPausedState.value = null;
-	qualRefAlert.value = null;
+	session.emergencyWho = null;
+	session.emergencyMsg = null;
+	session.pausedState = null;
+	session.refAlert = null;
 
-	if (!qualMappool.value[qualCurrentMapIdx.value]) {
-		qualState.value = "idle";
+	if (!session.mappool[session.currentMapIdx]) {
+		session.state = "idle";
 		return;
 	}
 
 	if (resumeState === "checking_ready" || resumeState === "starting") {
-		requestQualReadyCheck();
+		requestQualReadyCheck(channelId);
 		return;
 	}
 
-	qualState.value = resumeState ?? "waiting_ready";
+	session.state = resumeState ?? "waiting_ready";
 }
 
-function setNextMap() {
-	const map = qualMappool.value[qualCurrentMapIdx.value];
+function setNextMap(channelId: number) {
+	const session = ensureQualSession(channelId);
+	const map = session.mappool[session.currentMapIdx];
+
 	if (!map) {
-		qualState.value = "done";
+		clearQualStartTimeout(channelId);
+		clearQualReadyCheckTimeout(channelId);
+		session.state = "done";
 		return;
 	}
 
 	const mod = getQualMapModCommand(map);
 
-	clearQualStartTimeout();
-	clearQualReadyCheckTimeout();
-	qualRefAlert.value = null;
-	sendQualCmd(`!mp map ${map.id}`);
-	sendQualCmd(`!mp mods ${mod}`.trimEnd());
-	sendQualCmd(`!mp timer ${Number(store.state.settings.refTimerDefault) || 120}`);
-	qualState.value = "waiting_ready";
+	clearQualStartTimeout(channelId);
+	clearQualReadyCheckTimeout(channelId);
+	session.refAlert = null;
+	sendQualCmd(channelId, `!mp map ${map.id}`);
+	sendQualCmd(channelId, `!mp mods ${mod}`.trimEnd());
+	sendQualCmd(channelId, `!mp timer ${Number(store.state.settings.refTimerDefault) || 120}`);
+	session.state = "waiting_ready";
 }
 
-function sendQualCmd(cmd: string) {
-	if (qualsChannelId === null) return;
-	socket.emit("input", {target: qualsChannelId, text: cmd});
+function sendQualCmd(channelId: number, cmd: string) {
+	socket.emit("input", {target: channelId, text: cmd});
 }
 
-function sendQualStart() {
+function sendQualStart(channelId: number) {
+	const session = ensureQualSession(channelId);
 	const startTimer = Number(store.state.settings.refStartTimer);
 
-	clearQualStartTimeout();
-	qualRefAlert.value = null;
-	qualState.value = "running";
-	sendQualCmd(startTimer > 0 ? `!mp start ${startTimer}` : "!mp start");
+	clearQualStartTimeout(channelId);
+	session.refAlert = null;
+	session.state = "running";
+	sendQualCmd(channelId, startTimer > 0 ? `!mp start ${startTimer}` : "!mp start");
 }
 
-function scheduleQualStart() {
-	clearQualStartTimeout();
-	qualState.value = "starting";
-	qualStartTimeout = setTimeout(() => {
-		sendQualStart();
+function scheduleQualStart(channelId: number) {
+	const session = ensureQualSession(channelId);
+	const runtime = getQualRuntime(channelId);
+
+	clearQualStartTimeout(channelId);
+	session.state = "starting";
+	runtime.startTimeout = setTimeout(() => {
+		sendQualStart(channelId);
 	}, 350);
 }
 
-function clearQualStartTimeout() {
-	if (qualStartTimeout) {
-		clearTimeout(qualStartTimeout);
-		qualStartTimeout = null;
+function clearQualStartTimeout(channelId: number) {
+	const runtime = qualRuntimes.get(channelId);
+
+	if (runtime?.startTimeout) {
+		clearTimeout(runtime.startTimeout);
+		runtime.startTimeout = null;
 	}
 }
 
-function clearQualReadyCheckTimeout() {
-	if (qualReadyCheckTimeout) {
-		clearTimeout(qualReadyCheckTimeout);
-		qualReadyCheckTimeout = null;
-	}
+function clearQualReadyCheckTimeout(channelId: number) {
+	const runtime = qualRuntimes.get(channelId);
 
-	qualReadyCheckPending = false;
-}
-
-function requestQualReadyCheck(delay = 0) {
-	if (qualsChannelId === null) {
+	if (!runtime) {
 		return;
 	}
 
-	clearQualStartTimeout();
-	clearQualReadyCheckTimeout();
-	qualState.value = "checking_ready";
-	qualSettingsSnapshot = createQualSettingsSnapshot();
+	if (runtime.readyCheckTimeout) {
+		clearTimeout(runtime.readyCheckTimeout);
+		runtime.readyCheckTimeout = null;
+	}
+
+	runtime.readyCheckPending = false;
+}
+
+function requestQualReadyCheck(channelId: number, delay = 0) {
+	const session = ensureQualSession(channelId);
+	const runtime = getQualRuntime(channelId);
+
+	clearQualStartTimeout(channelId);
+	clearQualReadyCheckTimeout(channelId);
+	session.state = "checking_ready";
+	runtime.settingsSnapshot = createQualSettingsSnapshot();
 
 	const sendCheck = () => {
-		qualReadyCheckTimeout = null;
-		qualReadyCheckPending = false;
-		sendQualCmd("!mp settings");
+		runtime.readyCheckTimeout = null;
+		runtime.readyCheckPending = false;
+		sendQualCmd(channelId, "!mp settings");
 	};
 
 	if (delay > 0) {
-		qualReadyCheckPending = true;
-		qualReadyCheckTimeout = setTimeout(sendCheck, delay);
+		runtime.readyCheckPending = true;
+		runtime.readyCheckTimeout = setTimeout(sendCheck, delay);
 		return;
 	}
 
 	sendCheck();
 }
 
-function setQualRefAlert(message: string) {
-	qualRefAlert.value = message;
+function setQualRefAlert(channelId: number, message: string) {
+	ensureQualSession(channelId).refAlert = message;
 }
 
 function playEmergencyBeeps() {
@@ -451,10 +541,12 @@ function playEmergencyBeeps() {
 	}
 }
 
-function triggerEmergency(nick: string, text: string) {
-	qualEmergencyWho.value = nick;
-	qualEmergencyMsg.value = text;
-	pauseQuals(`Automation paused by ${nick}: ${text}`);
+function triggerEmergency(channelId: number, nick: string, text: string) {
+	const session = ensureQualSession(channelId);
+
+	session.emergencyWho = nick;
+	session.emergencyMsg = text;
+	pauseQuals(channelId, `Automation paused by ${nick}: ${text}`);
 
 	playEmergencyBeeps();
 
@@ -473,112 +565,95 @@ function isResumableQualState(state: QualState): state is ResumableQualState {
 	return state !== "idle" && state !== "done" && state !== "paused";
 }
 
-function getQualTeamSizeSetting() {
-	return (
-		Number(store.state.settings.refQualTeamSize) ||
-		Number(store.state.settings.refTeamSize) ||
-		1
-	);
-}
-
-function resetQualSettingsSnapshotIfNeeded(text: string) {
+function resetQualSettingsSnapshotIfNeeded(channelId: number, text: string) {
 	if (/^(?:Room|Match)\s+name:\s*/i.test(cleanIrcMessage(text).trim())) {
-		qualSettingsSnapshot = createQualSettingsSnapshot();
+		getQualRuntime(channelId).settingsSnapshot = createQualSettingsSnapshot();
 	}
 }
 
-function processQualSettingsLine(text: string) {
-	if (qualState.value !== "checking_ready") {
+function processQualSettingsLine(channelId: number, text: string) {
+	const session = getQualSession(channelId);
+	const runtime = getQualRuntime(channelId);
+
+	if (session.state !== "checking_ready") {
 		return;
 	}
 
-	if (qualReadyCheckPending) {
+	if (runtime.readyCheckPending) {
 		return;
 	}
 
-	resetQualSettingsSnapshotIfNeeded(text);
-	qualSettingsSnapshot = applyQualSettingsLine(qualSettingsSnapshot, text);
+	resetQualSettingsSnapshotIfNeeded(channelId, text);
+	runtime.settingsSnapshot = applyQualSettingsLine(runtime.settingsSnapshot, text);
 
-	if (!isQualSettingsSnapshotComplete(qualSettingsSnapshot)) {
+	if (!isQualSettingsSnapshotComplete(runtime.settingsSnapshot)) {
 		return;
 	}
 
-	const expectedPlayers = getExpectedQualPlayerCount(getQualTeamSizeSetting());
-	const reportedPlayers = qualSettingsSnapshot.reportedPlayers ?? 0;
-	const listedPlayers = qualSettingsSnapshot.slots.length;
-
-	if (reportedPlayers !== expectedPlayers || listedPlayers !== expectedPlayers) {
-		setQualRefAlert(
-			`Invalid player count: expected ${expectedPlayers}, found ${listedPlayers}. Check again.`
-		);
-		qualState.value = "waiting_ready";
-		qualSettingsSnapshot = createQualSettingsSnapshot();
+	if (!runtime.settingsSnapshot.slots.every((slot) => slot.ready)) {
+		session.state = "waiting_ready";
+		runtime.settingsSnapshot = createQualSettingsSnapshot();
 		return;
 	}
 
-	if (!qualSettingsSnapshot.slots.every((slot) => slot.ready)) {
-		qualState.value = "waiting_ready";
-		qualSettingsSnapshot = createQualSettingsSnapshot();
-		return;
-	}
-
-	qualSettingsSnapshot = createQualSettingsSnapshot();
-	scheduleQualStart();
+	runtime.settingsSnapshot = createQualSettingsSnapshot();
+	scheduleQualStart(channelId);
 }
 
-function handleQualPlayerChange() {
-	if (qualState.value === "checking_ready" || qualState.value === "starting") {
-		requestQualReadyCheck(350);
+function handleQualPlayerChange(channelId: number) {
+	const session = getQualSession(channelId);
+
+	if (session.state === "checking_ready" || session.state === "starting") {
+		requestQualReadyCheck(channelId, 350);
 	}
 }
 
-function processQualsMessage(text: string) {
+function processQualsMessage(channelId: number, text: string) {
+	const session = getQualSession(channelId);
 	const event = getQualsMessageEvent(text);
 
-	if (qualState.value === "checking_ready") {
-		processQualSettingsLine(text);
+	if (session.state === "checking_ready") {
+		processQualSettingsLine(channelId, text);
 	}
 
 	if (event === "player_change") {
-		handleQualPlayerChange();
+		handleQualPlayerChange(channelId);
 		return;
 	}
 
-	switch (qualState.value) {
+	switch (session.state) {
 		case "waiting_ready":
 			if (event === "ready") {
-				requestQualReadyCheck();
+				requestQualReadyCheck(channelId);
 			}
 
 			break;
 
 		case "running":
 			if (event === "finished") {
-				advanceQuals();
+				advanceQuals(channelId);
 			}
 
 			break;
 	}
 }
 
-function advanceQuals() {
+function advanceQuals(channelId: number) {
+	const session = ensureQualSession(channelId);
 	const totalRuns = Number(store.state.settings.refQualTotalRuns) || 1;
-	const totalMaps = qualMappool.value.length;
-	const next = getNextQualCursor(
-		qualCurrentMapIdx.value,
-		qualCurrentRun.value,
-		totalMaps,
-		totalRuns
-	);
+	const totalMaps = session.mappool.length;
+	const next = getNextQualCursor(session.currentMapIdx, session.currentRun, totalMaps, totalRuns);
 
 	if (next) {
-		qualCurrentMapIdx.value = next.mapIndex;
-		qualCurrentRun.value = next.run;
-		setNextMap();
+		session.currentMapIdx = next.mapIndex;
+		session.currentRun = next.run;
+		setNextMap(channelId);
 		return;
 	}
 
-	qualState.value = "done";
+	clearQualStartTimeout(channelId);
+	clearQualReadyCheckTimeout(channelId);
+	session.state = "done";
 }
 
 // ─── BanchoBot message router ─────────────────────────────────────────────────
@@ -589,11 +664,14 @@ export function processBanchoMessage(
 	channelId?: number,
 	isSelf = false
 ) {
-	const qualsActive =
-		qualState.value !== "idle" && qualState.value !== "done" && qualState.value !== "paused";
 	const isBanchoBot = isBanchoBotNick(nick);
 	const normalizedText = cleanIrcMessage(text);
-	const isQualsChannel = channelId === undefined || channelId === qualsChannelId;
+	const session = channelId === undefined ? null : getQualSession(channelId);
+	const qualsActive =
+		session !== null &&
+		session.state !== "idle" &&
+		session.state !== "done" &&
+		session.state !== "paused";
 
 	if (isBanchoBot && channelId !== undefined) {
 		const lobbyName = getLobbyNameFromSettingsMessage(normalizedText);
@@ -604,18 +682,18 @@ export function processBanchoMessage(
 	}
 
 	// Emergency word — any player, any message
-	if (qualsActive && isQualsChannel && !isBanchoBot) {
+	if (qualsActive && channelId !== undefined && !isBanchoBot) {
 		const eWord = String(store.state.settings.refQualEmergencyWord ?? "").trim();
 
 		if (shouldTriggerQualsEmergency(normalizedText, eWord, isSelf, isBanchoBot)) {
-			triggerEmergency(nick, normalizedText);
+			triggerEmergency(channelId, nick, normalizedText);
 		}
 
 		return;
 	}
 
-	if (qualsActive && isQualsChannel && isBanchoBot) {
-		processQualsMessage(normalizedText);
+	if (qualsActive && channelId !== undefined && isBanchoBot) {
+		processQualsMessage(channelId, normalizedText);
 
 		return;
 	}

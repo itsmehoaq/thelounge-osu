@@ -3,7 +3,6 @@ import {
 	applyQualSettingsLine,
 	buildMappoolModCommand,
 	createQualSettingsSnapshot,
-	getExpectedQualPlayerCount,
 	getMappoolSlugFromLobbyName,
 	getNextQualCursor,
 	getQualsMessageEvent,
@@ -92,10 +91,5 @@ describe("qualifiers automation message detection", function () {
 		expect(isQualSettingsSnapshotComplete(snapshot)).to.equal(true);
 		expect(snapshot.reportedPlayers).to.equal(3);
 		expect(snapshot.slots.map((slot) => slot.ready)).to.deep.equal([true, true, false]);
-	});
-
-	it("uses exact head-to-head player count for qualifier readiness", function () {
-		expect(getExpectedQualPlayerCount(9)).to.equal(9);
-		expect(getExpectedQualPlayerCount(4)).to.equal(4);
 	});
 });

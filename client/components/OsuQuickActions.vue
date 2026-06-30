@@ -221,19 +221,13 @@ import {
 	winnerHint,
 	winnerHintError,
 	clearWinnerHint,
-	qualState,
-	qualCurrentMapIdx,
-	qualCurrentRun,
-	qualMappool,
+	getQualSession,
 	qualLobbyNames,
 	qualChannelMappoolSlugs,
 	qualMappoolWarnings,
-	qualEmergencyWho,
-	qualEmergencyMsg,
-	qualRefAlert,
 	startQuals,
-	pauseQuals,
-	resumeQuals,
+	pauseQuals as pauseQualsForChannel,
+	resumeQuals as resumeQualsForChannel,
 	assignQualMappoolToChannel,
 	findQualMappoolBySlug,
 	getQualMapModCommand,
@@ -255,6 +249,14 @@ export default defineComponent({
 		const poolPickerOpen = ref(false);
 
 		const isVisible = computed(() => /^#mp_/i.test(props.channel.name));
+		const qualSession = computed(() => getQualSession(props.channel.id));
+		const qualState = computed(() => qualSession.value.state);
+		const qualCurrentMapIdx = computed(() => qualSession.value.currentMapIdx);
+		const qualCurrentRun = computed(() => qualSession.value.currentRun);
+		const qualMappool = computed(() => qualSession.value.mappool);
+		const qualEmergencyWho = computed(() => qualSession.value.emergencyWho);
+		const qualEmergencyMsg = computed(() => qualSession.value.emergencyMsg);
+		const qualRefAlert = computed(() => qualSession.value.refAlert);
 
 		const send = (text: string) => {
 			socket.emit("input", {target: props.channel.id, text});
@@ -287,6 +289,10 @@ export default defineComponent({
 		const sendAbort = () => send("!mp abort");
 
 		const saveChatLog = () => requestChatLog(props.channel.id);
+
+		const pauseQuals = () => pauseQualsForChannel(props.channel.id);
+
+		const resumeQuals = () => resumeQualsForChannel(props.channel.id);
 
 		const runCustom = (btn: QuickButton) => {
 			for (const cmd of btn.commands) {

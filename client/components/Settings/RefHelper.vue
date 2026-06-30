@@ -133,23 +133,6 @@
 					</div>
 
 					<div class="osu-field">
-						<label for="rh-qual-team-size" class="osu-label">Team size</label>
-						<p class="osu-hint">
-							Qualifiers are always Head-to-Head; readiness check expects exactly this
-							many players.
-						</p>
-						<input
-							id="rh-qual-team-size"
-							:value="store.state.settings.refQualTeamSize"
-							type="number"
-							name="refQualTeamSize"
-							class="input rh-number-input"
-							min="1"
-							max="16"
-						/>
-					</div>
-
-					<div class="osu-field">
 						<label for="rh-qual-emergency" class="osu-label"
 							>Emergency stop keyword</label
 						>

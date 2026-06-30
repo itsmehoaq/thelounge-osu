@@ -100,12 +100,6 @@ export function isQualSettingsSnapshotComplete(snapshot: QualSettingsSnapshot): 
 	);
 }
 
-export function getExpectedQualPlayerCount(teamSize: number): number {
-	const normalizedTeamSize = Math.max(1, Math.floor(teamSize) || 1);
-
-	return normalizedTeamSize;
-}
-
 export function getMappoolSlugFromLobbyName(lobbyName: string): string | null {
 	const match = cleanIrcMessage(lobbyName).match(/^\s*([A-Za-z0-9_-]+)\s*:/);
 
