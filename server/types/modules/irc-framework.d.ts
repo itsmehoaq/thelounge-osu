@@ -419,7 +419,7 @@ declare module "irc-framework" {
 		enable_setname?: boolean;
 		message_max_length?: number;
 		auto_reconnect?: boolean;
-		auto_reconnect_wait?: number;
+		auto_reconnect_max_wait?: number;
 		auto_reconnect_max_retries?: number;
 		ping_interval?: number;
 		ping_timeout?: number;

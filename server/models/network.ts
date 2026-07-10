@@ -298,9 +298,10 @@ class Network {
 			enable_setname: true,
 			auto_reconnect: true,
 
-			// Exponential backoff maxes out at 300 seconds after 9 reconnects,
-			// it will keep trying for well over an hour (plus the timeouts)
-			auto_reconnect_max_retries: 30,
+			// Stop automated reconnecting after 10 attempts. Further recovery is manual
+			// through the network reconnect button (/connect).
+			auto_reconnect_max_retries: 10,
+			auto_reconnect_max_wait: 60 * 1000,
 
 			// TODO: this type should be set after setIrcFrameworkOptions
 		}) as NetworkWithIrcFramework["irc"];
