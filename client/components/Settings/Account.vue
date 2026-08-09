@@ -2,7 +2,12 @@
 	<div>
 		<h2>osu! IRC</h2>
 
-		<div v-if="saveStatus === 'ok'" class="feedback success">Settings saved. Reconnect to apply.</div>
+		<div v-if="saveStatus === 'ok'" class="feedback success">
+			Credentials updated. Reconnecting…
+		</div>
+		<div v-else-if="saveStatus === 'disconnected'" class="feedback success">
+			Disconnected from osu! IRC.
+		</div>
 		<div v-else-if="saveStatus === 'err'" class="feedback error">Failed to save settings.</div>
 
 		<!-- Username -->
@@ -41,6 +46,10 @@
 					@keydown.stop
 				/>
 			</RevealPassword>
+			<label class="opt osu-remember-credentials">
+				<input v-model="rememberCredentials" type="checkbox" />
+				Remember credentials on this device
+			</label>
 		</div>
 
 		<!-- osu! credentials -->
@@ -73,63 +82,23 @@
 		</div>
 
 		<div class="osu-save-row">
-			<button type="button" class="btn" @click="saveAndReconnect">Save &amp; Reconnect</button>
+			<button type="button" class="btn" @click="saveAndReconnect">
+				<RefreshCw :size="14" aria-hidden="true" />
+				<span>Save &amp; Reconnect</span>
+			</button>
+			<button
+				type="button"
+				class="btn osu-disconnect"
+				:disabled="disconnecting || !canDisconnect"
+				@click="disconnect"
+			>
+				<Power :size="14" aria-hidden="true" />
+				<span>Disconnect</span>
+			</button>
 		</div>
 		<p class="osu-hint">Reconnect will open a new connection using the updated credentials.</p>
 	</div>
 </template>
-
-<script lang="ts">
-import {defineComponent, ref, reactive} from "vue";
-import RevealPassword from "../RevealPassword.vue";
-import {storedCredentials, saveCredentials} from "../../js/helpers/osuCredentials";
-import {useRouter} from "vue-router";
-import socket from "../../js/socket";
-import {useStore} from "../../js/store";
-
-export default defineComponent({
-	name: "OsuIrcSettings",
-	components: {RevealPassword},
-	setup() {
-		const router = useRouter();
-		const store = useStore();
-		const saveStatus = ref<"ok" | "err" | null>(null);
-
-		const form = reactive({
-			nick: storedCredentials.value?.nick ?? "",
-			password: storedCredentials.value?.password ?? "",
-		});
-
-		let statusTimer: ReturnType<typeof setTimeout> | null = null;
-
-		const saveAndReconnect = () => {
-			if (!form.nick || !form.password) {
-				saveStatus.value = "err";
-				return;
-			}
-
-			try {
-				saveCredentials({nick: form.nick, password: form.password});
-				saveStatus.value = "ok";
-				if (statusTimer) clearTimeout(statusTimer);
-				statusTimer = setTimeout(() => (saveStatus.value = null), 3000);
-			} catch {
-				saveStatus.value = "err";
-				return;
-			}
-
-			// Disconnect all current networks then navigate to /connect (auto-connect will fire)
-			const networks = store.state.networks;
-			for (const net of networks) {
-				socket.emit("input", {target: net.channels[0].id, text: "/quit"});
-			}
-			setTimeout(() => router.push("/connect"), 400);
-		};
-
-		return {store, form, saveStatus, saveAndReconnect};
-	},
-});
-</script>
 
 <style>
 .osu-label {
@@ -154,11 +123,40 @@ export default defineComponent({
 	margin-bottom: 14px;
 }
 
+.osu-remember-credentials {
+	align-items: center;
+	display: flex;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.osu-remember-credentials input {
+	margin: 0;
+}
+
 .osu-save-row {
 	display: flex;
+	flex-wrap: wrap;
 	gap: 8px;
 	margin-top: 4px;
 	margin-bottom: 4px;
+}
+
+.osu-save-row .btn {
+	align-items: center;
+	display: inline-flex;
+	gap: 7px;
+}
+
+.osu-disconnect {
+	border-color: #ff4466;
+	color: #ff4466;
+}
+
+.osu-disconnect:hover:not(:disabled),
+.osu-disconnect:focus:not(:disabled) {
+	background: #ff4466;
+	color: #fff;
 }
 
 .feedback.success {
@@ -181,3 +179,117 @@ export default defineComponent({
 	margin-bottom: 14px;
 }
 </style>
+
+<script lang="ts">
+import {computed, defineComponent, ref, reactive} from "vue";
+import {Power, RefreshCw} from "lucide-vue-next";
+import RevealPassword from "../RevealPassword.vue";
+import {
+	clearCredentials,
+	saveCredentials,
+	storedCredentials,
+} from "../../js/helpers/osuCredentials";
+import socket from "../../js/socket";
+import {useStore} from "../../js/store";
+
+export default defineComponent({
+	name: "OsuIrcSettings",
+	components: {Power, RefreshCw, RevealPassword},
+	setup() {
+		const store = useStore();
+		const saveStatus = ref<"ok" | "disconnected" | "err" | null>(null);
+		const disconnecting = ref(false);
+		const rememberCredentials = ref(storedCredentials.value !== null);
+		const canDisconnect = computed(
+			() =>
+				store.state.isConnected &&
+				store.state.networks.some((network) => network.status.connected)
+		);
+
+		const form = reactive({
+			nick: storedCredentials.value?.nick ?? "",
+			password: storedCredentials.value?.password ?? "",
+		});
+
+		let statusTimer: ReturnType<typeof setTimeout> | null = null;
+
+		const showStatus = (status: "ok" | "disconnected" | "err") => {
+			saveStatus.value = status;
+
+			if (statusTimer) {
+				clearTimeout(statusTimer);
+			}
+
+			statusTimer = setTimeout(() => {
+				saveStatus.value = null;
+				disconnecting.value = false;
+			}, 3000);
+		};
+
+		const saveAndReconnect = () => {
+			if (!form.nick || !form.password) {
+				showStatus("err");
+				return;
+			}
+
+			try {
+				if (rememberCredentials.value) {
+					saveCredentials({nick: form.nick, password: form.password});
+				} else {
+					clearCredentials();
+				}
+
+				showStatus("ok");
+			} catch {
+				showStatus("err");
+				return;
+			}
+
+			const networks = store.state.networks;
+			const reconnectData = {
+				...store.state.serverConfiguration?.defaults,
+				nick: form.nick,
+				username: form.nick,
+				password: form.password,
+				join: "",
+			};
+
+			for (const net of networks) {
+				socket.emit("input", {target: net.channels[0].id, text: "/quit"});
+			}
+
+			setTimeout(
+				() => socket.emit("network:new", reconnectData),
+				networks.length > 0 ? 400 : 0
+			);
+		};
+
+		const disconnect = () => {
+			if (disconnecting.value || !canDisconnect.value) {
+				return;
+			}
+
+			disconnecting.value = true;
+
+			for (const network of store.state.networks) {
+				if (network.status.connected) {
+					socket.emit("input", {target: network.channels[0].id, text: "/disconnect"});
+				}
+			}
+
+			showStatus("disconnected");
+		};
+
+		return {
+			store,
+			form,
+			saveStatus,
+			disconnecting,
+			canDisconnect,
+			rememberCredentials,
+			saveAndReconnect,
+			disconnect,
+		};
+	},
+});
+</script>

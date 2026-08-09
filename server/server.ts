@@ -66,6 +66,7 @@ export type Server = ioServer<
 // A random number that will force clients to reload the page if it differs
 const serverHash = Math.floor(Date.now() * Math.random());
 const publicSessionCloseDelay = 5000;
+const publicSessionDisconnectDelay = 30 * 1000;
 
 let manager: ClientManager | null = null;
 
@@ -818,7 +819,9 @@ function initializeClient(
 	});
 
 	socket.on("osu:settings:save", (data) => {
-		if (!_.isPlainObject(data)) return;
+		if (!_.isPlainObject(data)) {
+			return;
+		}
 
 		const allowed = {
 			nick: typeof data.nick === "string" ? data.nick.trim() : undefined,
@@ -1143,6 +1146,13 @@ function performAuthentication(this: Socket, data: AuthPerformData) {
 
 		socket.on("disconnect", () => {
 			activePublicSession.socketIds.delete(socket.id);
+
+			if (
+				activePublicSession.socketIds.size === 0 &&
+				activePublicSession.cleanupTimer === null
+			) {
+				schedulePublicSessionCleanup(sessionId, publicSessionDisconnectDelay);
+			}
 		});
 
 		if (!requestedSessionId) {

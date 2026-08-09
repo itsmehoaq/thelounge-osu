@@ -53,7 +53,7 @@ export default <IrcEventHandler>function (irc, network) {
 		}
 
 		network.channels.forEach((chan) => {
-			if (chan.type !== ChanType.CHANNEL) {
+			if (chan.type !== ChanType.CHANNEL || !network.shouldAutoJoinChannel(chan)) {
 				return;
 			}
 
@@ -106,6 +106,10 @@ export default <IrcEventHandler>function (irc, network) {
 		if (identSocketId > 0) {
 			client.manager.identHandler.removeSocket(identSocketId);
 			identSocketId = 0;
+		}
+
+		if (irc.connection.registered !== false) {
+			network.rememberJoinedMultiplayerChannels();
 		}
 
 		network.channels.forEach((chan) => {

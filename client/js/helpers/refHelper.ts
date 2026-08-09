@@ -70,7 +70,6 @@ export const qualMappoolWarnings = ref<Record<number, string>>({});
 export const qualSessions = ref<Record<number, QualSession>>({});
 
 let pendingMadeLobbyName: string | null = null;
-const requestedLobbySettingsChannels = new Set<number>();
 
 type QualRuntime = {
 	settingsSnapshot: QualSettingsSnapshot;
@@ -197,15 +196,6 @@ export function handleMappoolChannelJoined(channelId: number, channelName: strin
 		setQualLobbyName(channelId, pendingMadeLobbyName);
 		pendingMadeLobbyName = null;
 	}
-
-	if (requestedLobbySettingsChannels.has(channelId)) {
-		return;
-	}
-
-	requestedLobbySettingsChannels.add(channelId);
-	setTimeout(() => {
-		socket.emit("input", {target: channelId, text: "!mp settings"});
-	}, 800);
 }
 
 export function processRefereeMessage(text: string) {

@@ -326,6 +326,19 @@ the server tab on new connection"
 						</p>
 					</div>
 				</template>
+				<div class="connect-row">
+					<label></label>
+					<label class="opt remember-credentials">
+						<input type="hidden" name="rememberCredentials" value="" />
+						<input
+							v-model="defaults.rememberCredentials"
+							type="checkbox"
+							name="rememberCredentials"
+							value="1"
+						/>
+						Remember credentials on this device
+					</label>
+				</div>
 			</template>
 			<template v-else>
 				<h2 id="label-auth">Authentication</h2>
@@ -430,6 +443,16 @@ the server tab on new connection"
 	margin: 3px 10px 0 0;
 }
 
+#connect .remember-credentials {
+	align-items: center;
+	display: flex;
+	gap: 8px;
+}
+
+#connect .remember-credentials input {
+	margin: 0;
+}
+
 #connect .connect-sasl-external {
 	padding: 10px;
 	border-radius: 2px;
@@ -462,6 +485,7 @@ import {ClientNetwork} from "../js/types";
 
 export type NetworkFormDefaults = Partial<ClientNetwork> & {
 	join?: string;
+	rememberCredentials?: boolean;
 };
 
 export default defineComponent({

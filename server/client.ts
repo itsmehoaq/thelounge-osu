@@ -16,7 +16,12 @@ import inputs from "./plugins/inputs";
 import PublicClient from "./plugins/packages/publicClient";
 import SqliteMessageStorage from "./plugins/messageStorage/sqlite";
 import TextFileMessageStorage from "./plugins/messageStorage/text";
-import Network, {IgnoreListItem, NetworkConfig, NetworkWithIrcFramework} from "./models/network";
+import Network, {
+	IgnoreListItem,
+	NetworkConfig,
+	NetworkWithIrcFramework,
+	isBanchoHost,
+} from "./models/network";
 import ClientManager from "./clientManager";
 import {MessageStorage} from "./plugins/messageStorage/types";
 import {StorageCleaner} from "./storageCleaner";
@@ -343,6 +348,19 @@ class Client {
 	connectToNetwork(args: Record<string, any>, isStartup = false) {
 		const client = this;
 
+		const requestedHost = String(
+			Config.values.lockNetwork ? Config.values.defaults.host : args.host || ""
+		).toLowerCase();
+		const existingBanchoNetwork = isBanchoHost(requestedHost)
+			? client.networks.find((network) => isBanchoHost(network.host))
+			: undefined;
+
+		// Bancho's aliases are the same service. Repeated network:new events must
+		// not multiply IRC connections and their keep-alive traffic.
+		if (existingBanchoNetwork) {
+			return existingBanchoNetwork;
+		}
+
 		// Get channel id for lobby before creating other channels for nicer ids
 		const lobbyChannelId = client.idChan++;
 
@@ -350,6 +368,23 @@ class Client {
 
 		// Set network lobby channel id
 		network.getLobby().id = lobbyChannelId;
+
+		if (isBanchoHost(requestedHost) && !network.getChannel("BanchoBot")) {
+			network.addChannel(
+				client.createChannel({
+					name: "BanchoBot",
+					type: ChanType.QUERY,
+				})
+			);
+		}
+
+		if (!isStartup) {
+			network.channels.forEach((chan) => {
+				if (chan.type === ChanType.CHANNEL && /^#mp_/i.test(chan.name)) {
+					network.rejoinChannelIds.add(chan.id);
+				}
+			});
+		}
 
 		client.networks.push(network);
 		client.emit("network", {
@@ -389,6 +424,8 @@ class Client {
 			client.save();
 			network.channels.forEach((channel) => channel.loadMessages(client, network));
 		}
+
+		return network;
 	}
 
 	generateToken(callback: (token: string) => void) {

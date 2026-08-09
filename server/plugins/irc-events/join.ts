@@ -37,6 +37,16 @@ export default <IrcEventHandler>function (irc, network) {
 			});
 		}
 
+		if (data.nick === irc.user.nick && /^#mp_/i.test(chan.name)) {
+			const joinedChannel = chan;
+
+			setTimeout(() => {
+				if (joinedChannel.state === ChanState.JOINED && network.irc.connected) {
+					network.irc.say(joinedChannel.name, "!mp settings");
+				}
+			}, 800);
+		}
+
 		const user = new User({nick: data.nick});
 		const msg = new Msg({
 			time: data.time,

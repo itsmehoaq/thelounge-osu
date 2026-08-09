@@ -16,12 +16,17 @@ const input: PluginInputHandler = function (network, chan, cmd, args) {
 			return;
 		}
 
-		if (irc.connected) {
+		const socket = irc.connection?.transport?.socket;
+		const connectionInProgress = socket?.connecting || socket?.readyState === "opening";
+
+		if (irc.connected || connectionInProgress) {
 			chan.pushMessage(
 				this,
 				new Msg({
 					type: MessageType.ERROR,
-					text: "You are already connected.",
+					text: connectionInProgress
+						? "A connection attempt is already in progress."
+						: "You are already connected.",
 				})
 			);
 			return;

@@ -35,17 +35,8 @@ socket.on("network:status", function (data) {
 		return;
 	}
 
-	const wasConnected = network.status.connected;
 	network.status.connected = data.connected;
 	network.status.secure = data.secure;
-
-	if (data.connected && !wasConnected) {
-		// Auto-open BanchoBot query on IRC connect
-		const lobby = network.channels[0];
-		if (lobby) {
-			socket.emit("input", {target: lobby.id, text: "/query BanchoBot"});
-		}
-	}
 
 	if (!data.connected) {
 		network.channels.forEach((channel) => {

@@ -3,12 +3,16 @@
 </template>
 
 <script lang="ts">
-import {defineComponent, ref, onMounted, nextTick} from "vue";
+import {defineComponent, ref, onMounted} from "vue";
 
 import socket from "../../js/socket";
 import {useStore} from "../../js/store";
 import NetworkForm, {NetworkFormDefaults} from "../NetworkForm.vue";
-import {storedCredentials, saveCredentials} from "../../js/helpers/osuCredentials";
+import {
+	clearCredentials,
+	saveCredentials,
+	storedCredentials,
+} from "../../js/helpers/osuCredentials";
 
 export default defineComponent({
 	name: "Connect",
@@ -26,11 +30,24 @@ export default defineComponent({
 
 		const handleSubmit = (data: Record<string, any>) => {
 			disabled.value = true;
-			if (data.nick && data.password) {
-				saveCredentials({nick: String(data.nick), password: String(data.password)});
+
+			const managesStoredCredentials = Object.prototype.hasOwnProperty.call(
+				data,
+				"rememberCredentials"
+			);
+			const rememberCredentials =
+				data.rememberCredentials === true || data.rememberCredentials === "1";
+			delete data.rememberCredentials;
+
+			if (managesStoredCredentials) {
+				if (rememberCredentials && data.nick && data.password) {
+					saveCredentials({nick: String(data.nick), password: String(data.password)});
+				} else if (!rememberCredentials) {
+					clearCredentials();
+				}
 			}
+
 			data.join = "";
-			data.commands = "/query BanchoBot";
 			socket.emit("network:new", data);
 		};
 
@@ -110,23 +127,28 @@ export default defineComponent({
 			Object.assign(
 				{},
 				store.state.serverConfiguration?.defaults,
-				parseOverrideParams(props.queryParams)
+				parseOverrideParams(props.queryParams),
+				{rememberCredentials: storedCredentials.value !== null}
 			)
 		);
 
-		onMounted(async () => {
+		onMounted(() => {
 			const creds = storedCredentials.value;
-			if (!creds) return;
+
+			if (!creds) {
+				return;
+			}
 
 			// Pre-fill from localStorage
 			defaults.value = Object.assign({}, defaults.value, {
 				nick: creds.nick,
 				password: creds.password,
+				rememberCredentials: true,
 			});
 
-			// Auto-submit on next tick once the form has rendered
-			await nextTick();
-			handleSubmit(defaults.value as Record<string, any>);
+			if (store.state.networks.length === 0) {
+				handleSubmit(defaults.value as Record<string, any>);
+			}
 		});
 
 		return {

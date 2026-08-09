@@ -10,7 +10,7 @@ import STSPolicies from "../plugins/sts";
 import ClientCertificate, {ClientCertificateType} from "../plugins/clientCertificate";
 import Client from "../client";
 import {MessageType} from "../../shared/types/msg";
-import {ChanType} from "../../shared/types/chan";
+import {ChanState, ChanType} from "../../shared/types/chan";
 import {SharedNetwork} from "../../shared/types/network";
 
 type NetworkIrcOptions = {
@@ -24,6 +24,8 @@ type NetworkIrcOptions = {
 	rejectUnauthorized: boolean;
 	webirc: WebIRC | null;
 	client_certificate: ClientCertificateType | null;
+	ping_interval: number;
+	ping_timeout: number;
 	socks?: {
 		host: string;
 		port: number;
@@ -43,6 +45,10 @@ type NetworkStatus = {
 	connected: boolean;
 	secure: boolean;
 };
+
+export function isBanchoHost(host: string) {
+	return ["irc.ppy.sh", "cho.ppy.sh"].includes(host.toLowerCase());
+}
 
 export type IgnoreListItem = Hostmask & {
 	when: number;
@@ -121,6 +127,7 @@ class Network {
 	chanCache!: Chan[];
 	ignoreList!: IgnoreList;
 	keepNick!: string | null;
+	rejoinChannelIds!: Set<number>;
 
 	status!: NetworkStatus;
 
@@ -173,6 +180,7 @@ class Network {
 			chanCache: [],
 			ignoreList: [],
 			keepNick: null,
+			rejoinChannelIds: new Set<number>(),
 		});
 
 		if (!this.uuid) {
@@ -290,6 +298,8 @@ class Network {
 	}
 
 	createIrcFramework(this: NetworkWithIrcFramework, client: Client) {
+		const isBancho = isBanchoHost(this.host);
+
 		this.irc = new IrcFramework.Client({
 			version: false, // We handle it ourselves
 			outgoing_addr: Config.values.bind,
@@ -298,10 +308,12 @@ class Network {
 			enable_setname: true,
 			auto_reconnect: true,
 
-			// Stop automated reconnecting after 10 attempts. Further recovery is manual
-			// through the network reconnect button (/connect).
-			auto_reconnect_max_retries: 10,
+			// One automatic retry recovers brief Bancho drops without creating a
+			// sustained reconnect burst. Further recovery remains manual.
+			auto_reconnect_max_retries: isBancho ? 1 : 10,
 			auto_reconnect_max_wait: 60 * 1000,
+			ping_interval: 30,
+			ping_timeout: 120,
 
 			// TODO: this type should be set after setIrcFrameworkOptions
 		}) as NetworkWithIrcFramework["irc"];
@@ -658,6 +670,23 @@ class Network {
 			}) as Channel[];
 
 		return network;
+	}
+
+	rememberJoinedMultiplayerChannels() {
+		this.rejoinChannelIds = new Set(
+			this.channels
+				.filter(
+					(chan) =>
+						chan.type === ChanType.CHANNEL &&
+						chan.state === ChanState.JOINED &&
+						/^#mp_/i.test(chan.name)
+				)
+				.map((chan) => chan.id)
+		);
+	}
+
+	shouldAutoJoinChannel(chan: Chan) {
+		return !/^#mp_/i.test(chan.name) || this.rejoinChannelIds.has(chan.id);
 	}
 
 	getChannel(name: string) {

@@ -21,9 +21,11 @@ function getPublicSessionId(): string | null {
 	const key = "thelounge.publicSessionId";
 
 	try {
-		const existing = window.sessionStorage.getItem(key);
+		const existing = window.localStorage.getItem(key) || window.sessionStorage.getItem(key);
 
 		if (existing) {
+			window.localStorage.setItem(key, existing);
+			window.sessionStorage.removeItem(key);
 			return existing;
 		}
 
@@ -32,7 +34,7 @@ function getPublicSessionId(): string | null {
 				? crypto.randomUUID()
 				: `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-		window.sessionStorage.setItem(key, generated);
+		window.localStorage.setItem(key, generated);
 		return generated;
 	} catch {
 		return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
