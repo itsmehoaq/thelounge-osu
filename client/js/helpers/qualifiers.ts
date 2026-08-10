@@ -106,6 +106,14 @@ export function getMappoolSlugFromLobbyName(lobbyName: string): string | null {
 	return match ? normalizeMappoolSlug(match[1]) : null;
 }
 
+export function normalizeQualStartIndex(startMapIndex: number, totalMaps: number): number {
+	if (totalMaps <= 0 || !Number.isFinite(startMapIndex)) {
+		return 0;
+	}
+
+	return Math.min(Math.max(Math.trunc(startMapIndex), 0), totalMaps - 1);
+}
+
 export function getNextQualCursor(
 	currentMapIndex: number,
 	currentRun: number,

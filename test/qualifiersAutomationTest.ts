@@ -8,6 +8,7 @@ import {
 	getQualsMessageEvent,
 	isQualSettingsSnapshotComplete,
 	isBanchoBotNick,
+	normalizeQualStartIndex,
 	shouldTriggerQualsEmergency,
 } from "../client/js/helpers/qualifiers";
 
@@ -54,6 +55,13 @@ describe("qualifiers automation message detection", function () {
 
 	it("allows another player to trigger the emergency keyword", function () {
 		expect(shouldTriggerQualsEmergency("please !PANIC", "!panic", false, false)).to.equal(true);
+	});
+
+	it("normalizes the selected qualifier start map", function () {
+		expect(normalizeQualStartIndex(2, 5)).to.equal(2);
+		expect(normalizeQualStartIndex(-1, 5)).to.equal(0);
+		expect(normalizeQualStartIndex(20, 5)).to.equal(4);
+		expect(normalizeQualStartIndex(Number.NaN, 5)).to.equal(0);
 	});
 
 	it("finds the next qualifier map in pool order", function () {

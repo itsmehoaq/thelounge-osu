@@ -13,6 +13,7 @@ import {
 	isBanchoBotNick,
 	isQualSettingsSnapshotComplete,
 	normalizeMappoolSlug,
+	normalizeQualStartIndex,
 	type QualSettingsSnapshot,
 	shouldTriggerQualsEmergency,
 } from "./qualifiers";
@@ -342,7 +343,7 @@ function getLobbyNameFromSettingsMessage(text: string): string | null {
 	return match ? match[1].trim() : null;
 }
 
-export function startQuals(channelId: number) {
+export function startQuals(channelId: number, startMapIndex = 0): boolean {
 	const pool = getQualMappoolForChannel(channelId);
 
 	if (!pool?.maps.length) {
@@ -350,7 +351,7 @@ export function startQuals(channelId: number) {
 			channelId,
 			'No valid mappool found. Please assign a mappool for this lobby in "Map Pick" button'
 		);
-		return;
+		return false;
 	}
 
 	clearQualStartTimeout(channelId);
@@ -359,6 +360,8 @@ export function startQuals(channelId: number) {
 	Object.assign(
 		ensureQualSession(channelId),
 		createQualSession({
+			currentMapIdx: normalizeQualStartIndex(startMapIndex, pool.maps.length),
+			currentRun: 1,
 			mappool: pool.maps,
 		})
 	);
@@ -372,6 +375,7 @@ export function startQuals(channelId: number) {
 	);
 
 	setNextMap(channelId);
+	return true;
 }
 
 export function pauseQuals(channelId: number, message?: string | Event) {

@@ -109,7 +109,7 @@
 				class="qa-btn qa-quals-start"
 				:disabled="!store.state.isConnected || !availableMappools.length"
 				:title="qualStartTitle"
-				@click="startQuals(channel.id)"
+				@click="openQualStartModal"
 			>
 				<Play :size="12" />
 				<span class="qa-label">Quals</span>
@@ -150,6 +150,86 @@
 				<span class="qa-label">{{ btn.label }}</span>
 			</button>
 		</template>
+	</div>
+
+	<div
+		v-if="isVisible && qualStartModalOpen && availableMappools.length"
+		class="qa-pool-modal-backdrop"
+		@click.self="closeQualStartModal"
+	>
+		<div
+			class="qa-pool-modal qa-resume-modal"
+			role="dialog"
+			aria-modal="true"
+			aria-label="Start qualifiers automation"
+		>
+			<div class="qa-pool-modal-head">
+				<span class="qa-pool-title">Start Qualifiers</span>
+				<button
+					type="button"
+					class="qa-pool-close"
+					aria-label="Close"
+					@click="closeQualStartModal"
+				>
+					<X :size="14" />
+				</button>
+			</div>
+			<div v-if="availableMappools.length > 1" class="qa-pool-selector">
+				<label class="qa-pool-selector-label" for="qa-qual-start-pool">Mappool</label>
+				<select
+					id="qa-qual-start-pool"
+					:value="activePoolSlug"
+					class="qa-pool-select"
+					@change="selectStartPoolForChannel"
+				>
+					<option value="">Select mappool</option>
+					<option v-for="pool in availableMappools" :key="pool.slug" :value="pool.slug">
+						{{ pool.slug }} ({{ pool.maps.length }} maps)
+					</option>
+				</select>
+			</div>
+			<div v-if="!activeMappool" class="qa-pool-empty">
+				Select the mappool assigned to this lobby before starting automation.
+			</div>
+			<div v-else class="qa-resume-options">
+				<button
+					type="button"
+					class="qa-resume-option"
+					:disabled="!store.state.isConnected"
+					@click="startQualsFromBeginning"
+				>
+					<span class="qa-resume-option-title">Start from beginning</span>
+					<span class="qa-resume-option-detail">{{ beginningMapDetail }}</span>
+				</button>
+				<div class="qa-continue-option">
+					<label class="qa-resume-option-title" for="qa-qual-start-map"
+						>Continue from</label
+					>
+					<select
+						id="qa-qual-start-map"
+						v-model.number="qualStartMapIdx"
+						class="qa-pool-select qa-continue-select"
+					>
+						<option
+							v-for="(map, index) in parsedMappool"
+							:key="`${map.label}-${map.id}`"
+							:value="index"
+						>
+							{{ index + 1 }}. {{ map.label }} — {{ map.id }}
+						</option>
+					</select>
+					<button
+						type="button"
+						class="qa-continue-button"
+						:disabled="!store.state.isConnected || !parsedMappool.length"
+						@click="continueQualsFromMap"
+					>
+						<Play :size="13" />
+						<span>Continue</span>
+					</button>
+				</div>
+			</div>
+		</div>
 	</div>
 
 	<div
@@ -234,12 +314,12 @@ import {
 	readQualMappools,
 	type QualMap,
 } from "../js/helpers/refHelper";
-import {Settings, Clock, Play, Square, MapPinned, Download, Pause} from "lucide-vue-next";
+import {Settings, Clock, Play, Square, MapPinned, Download, Pause, X} from "lucide-vue-next";
 import {getMappoolSlugFromLobbyName} from "../js/helpers/qualifiers";
 
 export default defineComponent({
 	name: "OsuQuickActions",
-	components: {Settings, Clock, Play, Square, MapPinned, Download, Pause},
+	components: {Settings, Clock, Play, Square, MapPinned, Download, Pause, X},
 	props: {
 		network: {type: Object as PropType<ClientNetwork>, required: true},
 		channel: {type: Object as PropType<ClientChan>, required: true},
@@ -247,6 +327,8 @@ export default defineComponent({
 	setup(props) {
 		const store = useStore();
 		const poolPickerOpen = ref(false);
+		const qualStartModalOpen = ref(false);
+		const qualStartMapIdx = ref(0);
 
 		const isVisible = computed(() => /^#mp_/i.test(props.channel.name));
 		const qualSession = computed(() => getQualSession(props.channel.id));
@@ -356,6 +438,39 @@ export default defineComponent({
 		);
 
 		const parsedMappool = computed<QualMap[]>(() => activeMappool.value?.maps ?? []);
+		const beginningMapDetail = computed(() => {
+			const map = parsedMappool.value[0];
+
+			return map ? `1. ${map.label} — ${map.id}` : "No maps available";
+		});
+
+		const openQualStartModal = () => {
+			if (!store.state.isConnected || !availableMappools.value.length) {
+				return;
+			}
+
+			poolPickerOpen.value = false;
+			qualStartMapIdx.value = 0;
+			qualStartModalOpen.value = true;
+		};
+
+		const closeQualStartModal = () => {
+			qualStartModalOpen.value = false;
+		};
+
+		const startQualsAtMap = (mapIndex: number) => {
+			if (!store.state.isConnected) {
+				return;
+			}
+
+			if (startQuals(props.channel.id, mapIndex)) {
+				closeQualStartModal();
+			}
+		};
+
+		const startQualsFromBeginning = () => startQualsAtMap(0);
+
+		const continueQualsFromMap = () => startQualsAtMap(qualStartMapIdx.value);
 
 		const mappoolWarning = computed(() => qualMappoolWarnings.value[props.channel.id] ?? "");
 
@@ -400,6 +515,11 @@ export default defineComponent({
 			assignQualMappoolToChannel(props.channel.id, target.value);
 		};
 
+		const selectStartPoolForChannel = (event: Event) => {
+			selectPoolForChannel(event);
+			qualStartMapIdx.value = 0;
+		};
+
 		const qualStateLabel = computed(() => {
 			switch (qualState.value) {
 				case "waiting_ready":
@@ -423,11 +543,14 @@ export default defineComponent({
 			store,
 			isVisible,
 			poolPickerOpen,
+			qualStartModalOpen,
+			qualStartMapIdx,
 			availableMappools,
 			activePoolSlug,
 			activeMappool,
 			mappoolWarning,
 			qualStartTitle,
+			beginningMapDetail,
 			customButtons,
 			winnerHint,
 			winnerHintError,
@@ -439,7 +562,6 @@ export default defineComponent({
 			qualEmergencyWho,
 			qualEmergencyMsg,
 			qualRefAlert,
-			startQuals,
 			pauseQuals,
 			resumeQuals,
 			parsedMappool,
@@ -450,7 +572,12 @@ export default defineComponent({
 			qualStateLabel,
 			openPoolPicker,
 			closePoolPicker,
+			openQualStartModal,
+			closeQualStartModal,
+			startQualsFromBeginning,
+			continueQualsFromMap,
 			selectPoolForChannel,
+			selectStartPoolForChannel,
 			pickMap,
 			getMapPickTitle,
 			getMapModLabel,
@@ -776,14 +903,74 @@ export default defineComponent({
 	white-space: nowrap;
 }
 
+.qa-continue-option {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 8px;
+	padding: 10px;
+	background: rgba(255, 255, 255, 0.02);
+	border: 1px solid #2a2a40;
+	border-radius: 4px;
+	color: #9999bb;
+	font-family: monospace;
+}
+
+.qa-continue-option .qa-resume-option-title {
+	grid-column: 1 / -1;
+}
+
+.qa-continue-select {
+	width: 100%;
+	min-width: 0;
+	padding: 0 6px;
+}
+
+.qa-continue-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+	height: 26px;
+	padding: 0 10px;
+	background: rgba(102, 221, 170, 0.08);
+	border: 1px solid rgba(102, 221, 170, 0.24);
+	border-radius: 4px;
+	color: #66ddaa;
+	cursor: pointer;
+	font-family: monospace;
+	font-size: 11px;
+}
+
+.qa-continue-button:hover:not(:disabled) {
+	background: rgba(102, 221, 170, 0.14);
+	border-color: rgba(102, 221, 170, 0.42);
+}
+
+.qa-continue-button:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
 .morning .qa-pool-modal {
 	border-color: #28333d;
 }
 
 .morning .qa-pool-modal-head,
 .morning .qa-pool-map,
-.morning .qa-resume-option {
+.morning .qa-resume-option,
+.morning .qa-continue-option {
 	border-color: #28333d;
+}
+
+@media (max-width: 420px) {
+	.qa-continue-option {
+		grid-template-columns: 1fr;
+	}
+
+	.qa-continue-button,
+	.qa-continue-option .qa-resume-option-title {
+		grid-column: 1;
+	}
 }
 
 .qa-winner-bar {
